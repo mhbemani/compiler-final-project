@@ -1,0 +1,2 @@
+/Users/naxter/Desktop/educational/academy-stufff/6th-semester/compiler/FP-phase1/my-project/build/CMakeFiles/edit_cache.dir
+/Users/naxter/Desktop/educational/academy-stufff/6th-semester/compiler/FP-phase1/my-project/build/CMakeFiles/rebuild_cache.dir

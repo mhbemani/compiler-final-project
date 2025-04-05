@@ -1,18 +1,27 @@
 {
-  "configurations": [
-    {
-      "name": "macos-clang-arm64",
-      "includePath": [
-        "${workspaceFolder}/**"
-      ],
-      "compilerPath": "/opt/homebrew/opt/llvm@16/bin/clang",
-      "cStandard": "${default}",
-      "cppStandard": "${default}",
-      "intelliSenseMode": "macos-clang-arm64",
-      "compilerArgs": [
-        ""
-      ]
-    }
-  ],
-  "version": 4
-}
+    "configurations": [
+      {
+        "name": "Mac LLVM@16",
+        "includePath": [
+          "${workspaceFolder}/**",
+          "/opt/homebrew/opt/llvm@16/include",
+          "/opt/homebrew/opt/llvm@16/lib/clang/16/include"
+        ],
+        "browse": {
+          "path": [
+            "/opt/homebrew/opt/llvm@16/lib",
+            "/opt/homebrew/opt/llvm@16/include"
+          ],
+          "limitSymbolsToIncludedHeaders": false
+        },
+        "macFrameworkPath": [
+          "/Library/Developer/CommandLineTools/SDKs/MacOSX.sdk/System/Library/Frameworks"
+        ],
+        "compilerPath": "/opt/homebrew/opt/llvm@16/bin/clang",
+        "cStandard": "c17",
+        "cppStandard": "c++17",
+        "intelliSenseMode": "macos-clang-arm64"
+      }
+    ],
+    "version": 4
+  }
