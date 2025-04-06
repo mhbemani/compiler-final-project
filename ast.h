@@ -1,48 +1,39 @@
 #ifndef AST_H
 #define AST_H
 
-#include <stdlib.h>
-#include <string.h>
+#ifdef __cplusplus
+extern "C" {
+#endif
 
 typedef enum {
-    AST_VARDECL_INT,     // int a = 5;
-    AST_VARDECL_STRING,  // String s = "text";
-    // Ready for future expansion:
-    AST_BINARY_EXPR      // a + b (example for later)
-} ASTType;
+    NODE_INT_LITERAL,
+    NODE_STRING_LITERAL,
+    NODE_IDENTIFIER,
+    NODE_VAR_DECL,
+    NODE_VAR_ASSIGN
+} NodeType;
 
 typedef struct ASTNode {
-    ASTType type;
-    char* name;
+    NodeType type;
+    char* data_type;
+    char* identifier;
     union {
-        int int_val;    // For AST_VARDECL_INT
-        char* str_val;  // For AST_VARDECL_STRING
-        // Future: struct { ASTNode* left, *right; char* op; } for expressions
+        int int_value;
+        char* string_value;
+        struct ASTNode* assignment_value;
     };
 } ASTNode;
 
-// Factory functions (defined inline)
-static inline ASTNode* create_int_decl(char* name, int value) {
-    ASTNode* node = malloc(sizeof(ASTNode));
-    node->type = AST_VARDECL_INT;
-    node->name = strdup(name);
-    node->int_val = value;
-    return node;
-}
+// Function declarations
+ASTNode* create_int_node(int value);
+ASTNode* create_string_node(char* value);
+ASTNode* create_identifier_node(char* id);
+ASTNode* create_var_decl_node(char* data_type, char* id, ASTNode* value);
+ASTNode* create_var_assign_node(char* id, ASTNode* value);
+void free_ast(ASTNode* node);
 
-static inline ASTNode* create_str_decl(char* name, char* value) {
-    ASTNode* node = malloc(sizeof(ASTNode));
-    node->type = AST_VARDECL_STRING;
-    node->name = strdup(name);
-    node->str_val = strdup(value);
-    return node;
+#ifdef __cplusplus
 }
+#endif
 
-static inline void free_ast(ASTNode* node) {
-    if (!node) return;
-    free(node->name);
-    if (node->type == AST_VARDECL_STRING) free(node->str_val);
-    free(node);
-}
-
-#endif // AST_H
+#endif

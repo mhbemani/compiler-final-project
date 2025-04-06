@@ -1,27 +1,27 @@
 {
-    "configurations": [
+  "configurations": [
       {
-        "name": "Mac LLVM@16",
-        "includePath": [
-          "${workspaceFolder}/**",
-          "/opt/homebrew/opt/llvm@16/include",
-          "/opt/homebrew/opt/llvm@16/lib/clang/16/include"
-        ],
-        "browse": {
-          "path": [
-            "/opt/homebrew/opt/llvm@16/lib",
-            "/opt/homebrew/opt/llvm@16/include"
+          "name": "Mac LLVM@20",
+          "includePath": [
+              "${workspaceFolder}/**",
+              "/opt/homebrew/cellar/llvm/20.1.2/include",
+              "/opt/homebrew/cellar/llvm/20.1.2/lib/clang/20/include"
           ],
-          "limitSymbolsToIncludedHeaders": false
-        },
-        "macFrameworkPath": [
-          "/Library/Developer/CommandLineTools/SDKs/MacOSX.sdk/System/Library/Frameworks"
-        ],
-        "compilerPath": "/opt/homebrew/opt/llvm@16/bin/clang",
-        "cStandard": "c17",
-        "cppStandard": "c++17",
-        "intelliSenseMode": "macos-clang-arm64"
+          "browse": {
+              "path": [
+                  "/opt/homebrew/cellar/llvm/20.1.2/lib",
+                  "/opt/homebrew/cellar/llvm/20.1.2/include"
+              ],
+              "limitSymbolsToIncludedHeaders": false
+          },
+          "macFrameworkPath": [
+              "/Library/Developer/CommandLineTools/SDKs/MacOSX.sdk/System/Library/Frameworks"
+          ],
+          "compilerPath": "/opt/homebrew/cellar/llvm/20.1.2/bin/clang",
+          "cStandard": "c17",
+          "cppStandard": "c++20",
+          "intelliSenseMode": "macos-clang-arm64"
       }
-    ],
-    "version": 4
-  }
+  ],
+  "version": 4
+}

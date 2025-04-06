@@ -1,9 +1,22 @@
 #ifndef CODEGEN_H
 #define CODEGEN_H
 
-#include <llvm-c/Core.h>
-#include "ast.h"
+#ifdef __cplusplus
+extern "C" {
+#endif
 
-void codegen(ASTNode* node);
+// Forward declare ASTNode to avoid including ast.h here
+typedef struct ASTNode ASTNode;
+
+// Use LLVM's official types (don't redefine)
+#include <llvm-c/Types.h>
+
+void init_codegen();
+void codegen_node(ASTNode* node);
+void finalize_codegen();
+
+#ifdef __cplusplus
+}
+#endif
 
 #endif

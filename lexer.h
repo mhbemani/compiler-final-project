@@ -2,22 +2,32 @@
 #define LEXER_H
 
 typedef enum {
-    TOK_INT,
-    TOK_STRING,
-    TOK_ID,
-    TOK_EQ,
-    TOK_NUM,
-    TOK_STR_LIT,
-    TOK_SEMI,
-    TOK_EOF
+    TOKEN_EOF,
+    TOKEN_INT,
+    TOKEN_STRING_TYPE,
+    TOKEN_IDENTIFIER,
+    TOKEN_INT_LITERAL,
+    TOKEN_STRING_LITERAL,
+    TOKEN_EQUALS,
+    TOKEN_SEMICOLON,
+    TOKEN_ERROR
 } TokenType;
 
 typedef struct {
     TokenType type;
-    char* value;
+    char* lexeme;
+    int int_value;
+    char* string_value;
 } Token;
 
-Token* tokenize(const char* input);
-void free_tokens(Token* tokens);
+typedef struct {
+    const char* source;
+    const char* current;
+    int line;
+} Lexer;
+
+void init_lexer(Lexer* lexer, const char* source);
+Token next_token(Lexer* lexer);
+void free_token(Token* token);
 
 #endif

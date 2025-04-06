@@ -1,43 +1,36 @@
 #include "codegen.h"
+#include "ast.h"  // Now included after codegen.h
 #include <llvm-c/Core.h>
-#include <llvm-c/Analysis.h>
-#include <llvm-c/ExecutionEngine.h>
-#include <stdio.h>
+#include <stdlib.h>
 
-void codegen(ASTNode* node) {
-    // Initialize LLVM (required for C API)
-    LLVMInitializeCore(LLVMGetGlobalPassRegistry());
+// Use LLVM's official types directly
+static LLVMModuleRef module = NULL;
+static LLVMBuilderRef builder = NULL;
+
+void init_codegen() {
+    module = LLVMModuleCreateWithName("main");
+    builder = LLVMCreateBuilder();
+}
+
+void codegen_node(ASTNode* node) {
+    if (!module || !builder) return;
     
-    // Create module and builder
-    LLVMContextRef context = LLVMGetGlobalContext();
-    LLVMModuleRef module = LLVMModuleCreateWithNameInContext("tiny_module", context);
-    LLVMBuilderRef builder = LLVMCreateBuilderInContext(context);
-
-    if (node->type == AST_VARDECL_INT) {
-        // Create 32-bit integer global
-        LLVMTypeRef int_type = LLVMInt32Type();
-        LLVMValueRef init_val = LLVMConstInt(int_type, node->int_val, 0);
-        LLVMValueRef global_var = LLVMAddGlobal(module, int_type, node->name);
-        LLVMSetInitializer(global_var, init_val);
-    } 
-    else if (node->type == AST_VARDECL_STRING) {
-        // Create string global
-        LLVMTypeRef char_ptr_type = LLVMPointerType(LLVMInt8Type(), 0);
-        LLVMValueRef init_val = LLVMBuildGlobalStringPtr(builder, node->str_val, "str_const");
-        LLVMValueRef global_var = LLVMAddGlobal(module, char_ptr_type, node->name);
-        LLVMSetInitializer(global_var, init_val);
+    switch (node->type) {
+        case NODE_INT_LITERAL: {
+            LLVMValueRef val = LLVMConstInt(LLVMInt32Type(), node->int_value, 0);
+            // TODO: Handle other node types
+            break;
+        }
+        case NODE_STRING_LITERAL:
+        case NODE_IDENTIFIER:
+        case NODE_VAR_DECL:
+        case NODE_VAR_ASSIGN:
+            // Implement these cases
+            break;
     }
+}
 
-    // Verify and dump module
-    char* verify_error = NULL;
-    if (LLVMVerifyModule(module, LLVMAbortProcessAction, &verify_error)) {
-        fprintf(stderr, "Verification failed: %s\n", verify_error);
-        LLVMDisposeMessage(verify_error);
-    }
-    LLVMDumpModule(module);
-
-    // Cleanup
-    LLVMDisposeBuilder(builder);
-    LLVMDisposeModule(module);
-    LLVMShutdown();
+void finalize_codegen() {
+    if (builder) LLVMDisposeBuilder(builder);
+    if (module) LLVMDisposeModule(module);
 }
