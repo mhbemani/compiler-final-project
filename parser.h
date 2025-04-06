@@ -1,16 +1,24 @@
 #ifndef PARSER_H
 #define PARSER_H
 
-#include "lexer.h"
 #include "ast.h"
+#include "lexer.h"
+#include <memory>
 
-typedef struct {
-    Lexer* lexer;
-    Token current_token;
-    char* error;
-} Parser;
-
-void init_parser(Parser* parser, Lexer* lexer);
-ASTNode* parse_statement(Parser* parser);
+class Parser {
+public:
+    Parser(Lexer& lexer);
+    std::unique_ptr<ProgramNode> parseProgram();
+    
+private:
+    Lexer& lexer;
+    Token currentToken;
+    Token peekToken;
+    
+    void advance();
+    std::unique_ptr<ASTNode> parseStatement();
+    std::unique_ptr<ASTNode> parseVarDecl();
+    std::unique_ptr<ASTNode> parseAssignment();
+};
 
 #endif

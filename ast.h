@@ -1,39 +1,51 @@
 #ifndef AST_H
 #define AST_H
 
-#ifdef __cplusplus
-extern "C" {
-#endif
+#include <memory>
+#include <vector>
+#include <string>
 
-typedef enum {
-    NODE_INT_LITERAL,
-    NODE_STRING_LITERAL,
-    NODE_IDENTIFIER,
-    NODE_VAR_DECL,
-    NODE_VAR_ASSIGN
-} NodeType;
+enum class VarType { INT, STRING };
 
-typedef struct ASTNode {
-    NodeType type;
-    char* data_type;
-    char* identifier;
-    union {
-        int int_value;
-        char* string_value;
-        struct ASTNode* assignment_value;
-    };
-} ASTNode;
+class ASTNode {
+public:
+    virtual ~ASTNode() = default;
+};
 
-// Function declarations
-ASTNode* create_int_node(int value);
-ASTNode* create_string_node(char* value);
-ASTNode* create_identifier_node(char* id);
-ASTNode* create_var_decl_node(char* data_type, char* id, ASTNode* value);
-ASTNode* create_var_assign_node(char* id, ASTNode* value);
-void free_ast(ASTNode* node);
+class ProgramNode : public ASTNode {
+public:
+    std::vector<std::unique_ptr<ASTNode>> statements;
+};
 
-#ifdef __cplusplus
-}
-#endif
+class VarDeclNode : public ASTNode {
+public:
+    VarDeclNode(VarType type, std::string name, std::unique_ptr<ASTNode> value)
+        : type(type), name(std::move(name)), value(std::move(value)) {}
+    
+    VarType type;
+    std::string name;
+    std::unique_ptr<ASTNode> value;
+};
+
+class AssignNode : public ASTNode {
+public:
+    AssignNode(std::string name, std::unique_ptr<ASTNode> value)
+        : name(std::move(name)), value(std::move(value)) {}
+    
+    std::string name;
+    std::unique_ptr<ASTNode> value;
+};
+
+class IntLiteral : public ASTNode {
+public:
+    IntLiteral(int value) : value(value) {}
+    int value;
+};
+
+class StrLiteral : public ASTNode {
+public:
+    StrLiteral(std::string value) : value(std::move(value)) {}
+    std::string value;
+};
 
 #endif

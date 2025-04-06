@@ -1,33 +1,29 @@
-#ifndef LEXER_H
-#define LEXER_H
+#pragma once
+#include <string>
+#include <variant>
 
-typedef enum {
-    TOKEN_EOF,
-    TOKEN_INT,
-    TOKEN_STRING_TYPE,
-    TOKEN_IDENTIFIER,
-    TOKEN_INT_LITERAL,
-    TOKEN_STRING_LITERAL,
-    TOKEN_EQUALS,
-    TOKEN_SEMICOLON,
-    TOKEN_ERROR
-} TokenType;
-
-typedef struct {
-    TokenType type;
-    char* lexeme;
-    int int_value;
-    char* string_value;
-} Token;
-
-typedef struct {
-    const char* source;
-    const char* current;
+struct Token {
+    enum Type {
+        Eof, Int, StringType, Ident, Equal, Semicolon,
+        IntLiteral, StrLiteral, Error
+    };
+    
+    Type type;
+    std::string lexeme;
     int line;
-} Lexer;
+};
 
-void init_lexer(Lexer* lexer, const char* source);
-Token next_token(Lexer* lexer);
-void free_token(Token* token);
-
-#endif
+class Lexer {
+public:
+    Lexer(const std::string& source);
+    Token nextToken();
+    
+private:
+    std::string source;
+    size_t pos = 0;
+    int line = 1;
+    
+    void skipWhitespace();
+    char peek() const;
+    char advance();
+};

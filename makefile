@@ -1,20 +1,17 @@
-CC = clang
-CXX = clang++
 LLVM_PREFIX = /opt/homebrew/opt/llvm
+CXX = $(LLVM_PREFIX)/bin/clang++
+CXXFLAGS = -std=c++17 -g -Wall -fexceptions -I$(LLVM_PREFIX)/include -I$(shell xcrun --show-sdk-path)/usr/include
+LDFLAGS = -L$(LLVM_PREFIX)/lib $(shell $(LLVM_PREFIX)/bin/llvm-config --ldflags)
+LIBS = $(shell $(LLVM_PREFIX)/bin/llvm-config --libs core irreader support)
 
-CFLAGS = -std=c11 -g -O2 -I$(LLVM_PREFIX)/include
-CXXFLAGS = -g -O2 -I$(LLVM_PREFIX)/include
-LDFLAGS = -L$(LLVM_PREFIX)/lib
-LIBS = -lLLVMCore -lLLVMSupport -lLLVMBitstreamReader -lLLVMRemarks -lLLVMDemangle -lz -lcurses -lm
+SRC = main.cpp lexer.cpp parser.cpp codegen.cpp
+OBJ = $(SRC:.cpp=.o)
 
-SRCS = main.c lexer.c parser.c codegen.c ast.c
-OBJS = $(SRCS:.c=.o)
+compiler: $(OBJ)
+	$(CXX) -o $@ $^ $(LDFLAGS) $(LIBS)
 
-compiler: $(OBJS)
-	$(CXX) $(LDFLAGS) -o $@ $(OBJS) $(LIBS)
-
-%.o: %.c
-	$(CC) $(CFLAGS) -c $< -o $@
+%.o: %.cpp
+	$(CXX) $(CXXFLAGS) -c $< -o $@
 
 clean:
-	rm -f compiler *.o
+	rm -f *.o compiler

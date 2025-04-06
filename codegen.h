@@ -1,22 +1,30 @@
 #ifndef CODEGEN_H
 #define CODEGEN_H
 
-#ifdef __cplusplus
-extern "C" {
-#endif
+#include "ast.h"
+#include <llvm/IR/LLVMContext.h>
+#include <llvm/IR/Module.h>
+#include <llvm/IR/IRBuilder.h>
+#include <unordered_map>
+#include <memory>
 
-// Forward declare ASTNode to avoid including ast.h here
-typedef struct ASTNode ASTNode;
-
-// Use LLVM's official types (don't redefine)
-#include <llvm-c/Types.h>
-
-void init_codegen();
-void codegen_node(ASTNode* node);
-void finalize_codegen();
-
-#ifdef __cplusplus
-}
-#endif
+class CodeGen {
+public:
+    CodeGen();
+    void generate(ProgramNode& ast);
+    void dump() const;
+    
+private:
+    std::unique_ptr<llvm::LLVMContext> context;
+    std::unique_ptr<llvm::Module> module;
+    std::unique_ptr<llvm::IRBuilder<>> builder;
+    
+    std::unordered_map<std::string, llvm::AllocaInst*> symbols;
+    
+    void generateStatement(ASTNode* node);
+    void generateVarDecl(VarDeclNode* node);
+    void generateAssign(AssignNode* node);
+    llvm::Value* generateValue(ASTNode* node, llvm::Type* expectedType);
+};
 
 #endif
