@@ -5,7 +5,7 @@ Parser::Parser(Lexer& lexer) : lexer(lexer) {
     currentToken = lexer.nextToken();
     peekToken = lexer.nextToken();
 }
-
+//  switches to the next Token
 void Parser::advance() {
     currentToken = peekToken;
     peekToken = lexer.nextToken();
@@ -100,3 +100,4 @@ std::unique_ptr<ASTNode> Parser::parseAssignment() {
     
     return std::make_unique<AssignNode>(name, std::move(value));
 }
+
