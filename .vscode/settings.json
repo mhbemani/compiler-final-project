@@ -57,6 +57,26 @@
   "C_Cpp_Runner.useLinkTimeOptimization": false,
   "C_Cpp_Runner.msvcSecureNoWarnings": false,
   "files.associations": {
-    "stdlib.h": "c"
+    "stdlib.h": "c",
+    "cstddef": "cpp",
+    "cstdint": "cpp",
+    "cstdio": "cpp",
+    "cstdlib": "cpp",
+    "cstring": "cpp",
+    "cwchar": "cpp",
+    "execution": "cpp",
+    "memory": "cpp",
+    "initializer_list": "cpp",
+    "iosfwd": "cpp",
+    "limits": "cpp",
+    "new": "cpp",
+    "optional": "cpp",
+    "stdexcept": "cpp",
+    "string": "cpp",
+    "string_view": "cpp",
+    "tuple": "cpp",
+    "typeinfo": "cpp",
+    "variant": "cpp",
+    "algorithm": "cpp"
   }
 }
