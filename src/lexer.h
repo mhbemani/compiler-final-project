@@ -4,8 +4,16 @@
 
 struct Token {
     enum Type {
-        Eof, Int, StringType, Ident, Equal, Semicolon,
-        IntLiteral, StrLiteral, Error
+        Eof, 
+        Int, 
+        StringType, 
+        Ident, 
+        Equal, 
+        DoubleQuotation,
+        Semicolon,
+        IntLiteral, 
+        StrLiteral, 
+        Error
     };
     
     Type type;

@@ -3,8 +3,8 @@
 #include "codegen.h"
 #include <iostream>
 
-int main() {
-    std::string source = "int a = 2; a = 4; String asd = \"asd\"; asd = \"ewd\";";
+int main(int argc, char* argv[]) {
+    std::string source = argv[1];  // Changed this line only
     
     try {
         Lexer lexer(source);

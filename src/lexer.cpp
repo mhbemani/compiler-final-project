@@ -1,5 +1,6 @@
 #include "lexer.h"
 #include <cctype>
+#include <iostream>
 
 Lexer::Lexer(const std::string& source) : source(source) {}
 
@@ -112,6 +113,7 @@ Token Lexer::nextToken() {
         return {Token::Semicolon, "", line, column};
     }
     
+    // std::cout << "reached here ...\n";
     if (c == '"') {
         pos++;
         column++;
@@ -126,16 +128,16 @@ Token Lexer::nextToken() {
             pos++;
         }
         
-        //        add other operators or anything needed like these           //
-
-        if (pos >= source.size()) return {Token::Error, "Unterminated string", line, column};
         
+        if (pos >= source.size()) return {Token::Error, "Unterminated string", line, column};
         std::string value = source.substr(start, pos - start);
         pos++;
         column++;
         return {Token::StrLiteral, value, line, column};
     }
     
+    //        add other operators or anything needed like these           //
+
     pos++;
     column++;
     return {Token::Error, "Unexpected character", line, column};
