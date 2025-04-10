@@ -26,7 +26,7 @@ std::unique_ptr<ProgramNode> Parser::parseProgram() {
 }
 
 std::unique_ptr<ASTNode> Parser::parseStatement() {
-    if (currentToken.type == Token::Int || currentToken.type == Token::StringType) {
+    if (currentToken.type == Token::Int || currentToken.type == Token::StringType|| currentToken.type == Token::Bool) {
         return parseVarDecl();
     }
     if (currentToken.type == Token::Ident) {
@@ -36,7 +36,17 @@ std::unique_ptr<ASTNode> Parser::parseStatement() {
 }
 
 std::unique_ptr<ASTNode> Parser::parseVarDecl() {
-    VarType type = currentToken.type == Token::Int ? VarType::INT : VarType::STRING;
+    VarType type;
+    // detecting type
+    if (currentToken.type == Token::Int) {
+        type = VarType::INT;
+    } else if (currentToken.type == Token::StringType) {
+        type = VarType::STRING;
+    } else if (currentToken.type == Token::Bool) {
+        type = VarType::BOOL;
+    } else {
+        throw std::runtime_error("Expected type in variable declaration");
+    }
     advance(); // Consume type
     
     if (currentToken.type != Token::Ident) {
@@ -56,7 +66,7 @@ std::unique_ptr<ASTNode> Parser::parseVarDecl() {
     }
 
     advance(); // Consume =
-    
+    //extractiong value
     std::unique_ptr<ASTNode> value;
     if (type == VarType::INT && currentToken.type == Token::IntLiteral) {
         value = std::make_unique<IntLiteral>(std::stoi(currentToken.lexeme));
@@ -65,10 +75,13 @@ std::unique_ptr<ASTNode> Parser::parseVarDecl() {
     else if (type == VarType::STRING && currentToken.type == Token::StrLiteral) {
         value = std::make_unique<StrLiteral>(currentToken.lexeme);
         advance();
-    } 
-    else {
+    }else if (type == VarType::BOOL && currentToken.type == Token::BoolLiteral) {
+        bool boolValue = (currentToken.lexeme == "true");
+        value = std::make_unique<BoolLiteral>(boolValue); // ← You need to define BoolLiteral if not yet
+        advance();
+    }else {
         throw std::runtime_error("Type mismatch in variable declaration");
-    } 
+    }
     if (currentToken.type != Token::Semicolon) {
         throw std::runtime_error("Expected ';' after variable declaration");
     }

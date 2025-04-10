@@ -8,6 +8,7 @@ struct Token {
         Int, 
         StringType, 
         Ident,
+        Bool,
         /* signs begin */ 
         Equal, 
         DoubleQuotation,
@@ -16,6 +17,7 @@ struct Token {
         /* signs end */
         IntLiteral, 
         StrLiteral, 
+        BoolLiteral,
         Error
     };
     

@@ -84,6 +84,11 @@
     "cwctype": "cpp",
     "ratio": "cpp",
     "vector": "cpp",
-    "*.inc": "cpp"
+    "*.inc": "cpp",
+    "__bit_reference": "cpp",
+    "__node_handle": "cpp",
+    "bitset": "cpp",
+    "deque": "cpp",
+    "locale": "cpp"
   }
 }

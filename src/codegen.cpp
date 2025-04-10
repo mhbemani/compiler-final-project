@@ -57,6 +57,8 @@ void CodeGen::generateVarDecl(VarDeclNode* node) {
     Type* type;
     if (node->type == VarType::INT) {
         type = Type::getInt32Ty(*context);
+    } else if (node->type == VarType::BOOL) {
+        type = Type::getInt1Ty(*context); // Boolean type in LLVM is i1
     } else { // STRING
         type = PointerType::get(Type::getInt8Ty(*context), 0);
     }
@@ -94,6 +96,11 @@ llvm::Value* CodeGen::generateValue(ASTNode* node, llvm::Type* expectedType) {
             throw std::runtime_error("Expected pointer type for string");
         }
         return builder->CreateGlobalStringPtr(strLit->value);
+    } else if(auto boolLit = dynamic_cast<BoolLiteral*>(node)){
+        if (!expectedType->isIntegerTy(1)) {
+            throw std::runtime_error("Expected boolean type");
+        }
+        return ConstantInt::get(Type::getInt1Ty(*context), boolLit->value);
     }
     throw std::runtime_error("Unsupported value type in code generation");
 }

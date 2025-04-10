@@ -5,7 +5,7 @@
 #include <vector>
 #include <string>
 
-enum class VarType { INT, STRING };
+enum class VarType { INT, STRING, BOOL };
 
 class ASTNode {
 public:
@@ -56,4 +56,10 @@ public:
     std::string value;
 };
 
+class BoolLiteral : public ASTNode {
+    public:
+        BoolLiteral(bool value) : value(value) {}
+        bool value;
+    };
+    
 #endif

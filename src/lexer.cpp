@@ -84,7 +84,9 @@ Token Lexer::nextToken() {
         
         if (lexeme == "int") return {Token::Int, "", line, column};
         if (lexeme == "String") return {Token::StringType, "", line, column};
-        
+        if (lexeme == "bool") return {Token::Bool, "", line, column};
+        if (lexeme == "true" || lexeme == "false") return {Token::BoolLiteral, lexeme, line, column};
+
         //          add other keywords           //
 
         return {Token::Ident, lexeme, line, column};
@@ -101,6 +103,8 @@ Token Lexer::nextToken() {
         return {Token::IntLiteral, source.substr(start, pos - start), line, column};
     }
     
+
+
     if (c == '=') {
         pos++;
         column++;
