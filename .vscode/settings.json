@@ -77,6 +77,13 @@
     "tuple": "cpp",
     "typeinfo": "cpp",
     "variant": "cpp",
-    "algorithm": "cpp"
+    "algorithm": "cpp",
+    "__verbose_abort": "cpp",
+    "cmath": "cpp",
+    "ctime": "cpp",
+    "cwctype": "cpp",
+    "ratio": "cpp",
+    "vector": "cpp",
+    "*.inc": "cpp"
   }
 }

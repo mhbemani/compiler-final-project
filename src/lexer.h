@@ -7,10 +7,13 @@ struct Token {
         Eof, 
         Int, 
         StringType, 
-        Ident, 
+        Ident,
+        /* signs begin */ 
         Equal, 
         DoubleQuotation,
         Semicolon,
+        Comma,
+        /* signs end */
         IntLiteral, 
         StrLiteral, 
         Error

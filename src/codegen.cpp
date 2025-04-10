@@ -36,7 +36,12 @@ void CodeGen::generate(ProgramNode& ast) {
 }
 
 void CodeGen::generateStatement(ASTNode* node) {
-    if (auto varDecl = dynamic_cast<VarDeclNode*>(node)) {
+    if (auto multiVarDecl = dynamic_cast<MultiVarDeclNode*>(node)) {
+        // Handle multiple variable declarations
+        for (auto& decl : multiVarDecl->declarations) {
+            generateVarDecl(decl.get());
+        }
+    } else if (auto varDecl = dynamic_cast<VarDeclNode*>(node)) {
         generateVarDecl(varDecl);
     } else if (auto assign = dynamic_cast<AssignNode*>(node)) {
         generateAssign(assign);

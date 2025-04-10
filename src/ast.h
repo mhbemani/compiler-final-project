@@ -27,6 +27,14 @@ public:
     std::unique_ptr<ASTNode> value;
 };
 
+class MultiVarDeclNode : public ASTNode {
+    public:
+        MultiVarDeclNode(std::vector<std::unique_ptr<VarDeclNode>> declarations)
+            : declarations(std::move(declarations)) {}
+        
+        std::vector<std::unique_ptr<VarDeclNode>> declarations;
+    };
+
 class AssignNode : public ASTNode {
 public:
     AssignNode(std::string name, std::unique_ptr<ASTNode> value)

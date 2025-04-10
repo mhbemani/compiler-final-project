@@ -20,6 +20,12 @@ private:
     void advance();
     std::unique_ptr<ASTNode> parseStatement();
     std::unique_ptr<ASTNode> parseVarDecl();
+    ///////////////////////////////
+    
+    std::unique_ptr<ASTNode> parseVarDeclMultiVariable(VarType type, std::string name); // int a , b = 10;
+    std::unique_ptr<ASTNode> parseVarDeclMultiBoth(VarType type, std::unique_ptr<ASTNode> value, std::vector<std::string> IdentNames);     // int a , b = 10, 12;
+
+    ///////////////////////////////
     std::unique_ptr<ASTNode> parseAssignment();
 
     // Critical additions

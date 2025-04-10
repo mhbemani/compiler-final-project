@@ -106,6 +106,12 @@ Token Lexer::nextToken() {
         column++;
         return {Token::Equal, "", line, column};
     }
+
+    if (c == ',') {
+        pos++;
+        column++;
+        return {Token::Comma, "", line, column};
+    }
     
     if (c == ';') {
         pos++;
