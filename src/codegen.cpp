@@ -47,13 +47,16 @@ void CodeGen::generateStatement(ASTNode* node) {
         generateAssign(assign);
     } else if (auto compound = dynamic_cast<CompoundAssignNode*>(node)) { // new
         generateCompoundAssign(compound);
+    } else if (auto ifElseNode = dynamic_cast<IfElseNode*>(node)) {
+        // Handle if-else statement
+        generateIfElse(ifElseNode); // Call the updated generateIfElse
     }
 }
 
 void CodeGen::generateVarDecl(VarDeclNode* node) {
-    if (symbols.find(node->name) != symbols.end()) {
-        throw std::runtime_error("Redeclaration of variable: " + node->name);
-    }
+    // if (symbols.find(node->name) != symbols.end()) {
+    //     throw std::runtime_error("Redeclaration of variable: " + node->name);
+    // }
     
     // Create the appropriate type based on variable type
     Type* type;
@@ -130,6 +133,55 @@ void CodeGen::generateCompoundAssign(CompoundAssignNode* node) {
     builder->CreateStore(result, alloca);
 }
 
+void CodeGen::generateIfElse(IfElseNode* node) {
+    Value* conditionValue = generateValue(node->condition.get(), Type::getInt1Ty(*context));
+    Function* parentFunc = builder->GetInsertBlock()->getParent();
+    BasicBlock* thenBlock = BasicBlock::Create(*context, "then", parentFunc);
+    BasicBlock* elseBlock = node->hasElseBlock() ? BasicBlock::Create(*context, "else", parentFunc) : nullptr;
+    BasicBlock* afterIfElseBlock = BasicBlock::Create(*context, "after_if_else", parentFunc);
+
+    builder->CreateCondBr(conditionValue, thenBlock, elseBlock ? elseBlock : afterIfElseBlock);
+
+    builder->SetInsertPoint(thenBlock);
+    if (auto* block = dynamic_cast<BlockNode*>(node->then_block.get())) {
+        generateBlock(block);
+    } else {
+        throw std::runtime_error("Expected BlockNode for then_block in IfElseNode");
+    }
+    if (!builder->GetInsertBlock()->getTerminator()) {
+        builder->CreateBr(afterIfElseBlock);
+    }
+
+    if (elseBlock) {
+        builder->SetInsertPoint(elseBlock);
+        if (node->isElseIf()) {
+            generateIfElse(dynamic_cast<IfElseNode*>(node->else_block.get()));
+            // Ensure the recursive call's block ends properly; rely on its after_if_else
+        } else if (auto* block = dynamic_cast<BlockNode*>(node->else_block.get())) {
+            generateBlock(block);
+            if (!builder->GetInsertBlock()->getTerminator()) {
+                builder->CreateBr(afterIfElseBlock);
+            }
+        } else {
+            throw std::runtime_error("Expected BlockNode or IfElseNode for else_block");
+        }
+        // Add a terminator if the else block itself needs one
+        if (!builder->GetInsertBlock()->getTerminator()) {
+            builder->CreateBr(afterIfElseBlock);
+        }
+    }
+
+    builder->SetInsertPoint(afterIfElseBlock);
+}
+
+
+
+void CodeGen::generateBlock(BlockNode* blockNode) {
+    // Iterate through all the statements in the block and generate them
+    for (auto& statement : blockNode->statements) {
+        generateStatement(statement.get());
+    }
+}
 
 llvm::Value* CodeGen::generateValue(ASTNode* node, llvm::Type* expectedType) {
     if (auto intLit = dynamic_cast<IntLiteral*>(node)) {
@@ -137,7 +189,6 @@ llvm::Value* CodeGen::generateValue(ASTNode* node, llvm::Type* expectedType) {
             return ConstantInt::get(Type::getInt32Ty(*context), intLit->value);
         }
         else if (expectedType->isFloatTy()) {
-            // Implicit int-to-float conversion
             return ConstantFP::get(Type::getFloatTy(*context), static_cast<double>(intLit->value));
         }
         throw std::runtime_error("Type mismatch: cannot convert integer to target type");
@@ -167,22 +218,41 @@ llvm::Value* CodeGen::generateValue(ASTNode* node, llvm::Type* expectedType) {
         return ConstantInt::get(Type::getInt8Ty(*context), charLit->value);
     }
     else if (auto binOp = dynamic_cast<BinaryOpNode*>(node)) {
+        // Handle comparison and logical operators (expect i1 output)
+        if (binOp->op == BinaryOp::EQUAL || binOp->op == BinaryOp::LESS_EQUAL ||
+            binOp->op == BinaryOp::NOT_EQUAL || binOp->op == BinaryOp::GREATER ||
+            binOp->op == BinaryOp::GREATER_EQUAL || binOp->op == BinaryOp::LESS ||
+            binOp->op == BinaryOp::AND || binOp->op == BinaryOp::OR) {
+            Value* left = generateValue(binOp->left.get(), binOp->op == BinaryOp::AND || binOp->op == BinaryOp::OR ? Type::getInt1Ty(*context) : Type::getInt32Ty(*context));
+            Value* right = generateValue(binOp->right.get(), binOp->op == BinaryOp::AND || binOp->op == BinaryOp::OR ? Type::getInt1Ty(*context) : Type::getInt32Ty(*context));
+            switch (binOp->op) {
+                case BinaryOp::EQUAL: return builder->CreateICmpEQ(left, right);
+                case BinaryOp::LESS_EQUAL: return builder->CreateICmpSLE(left, right);
+                case BinaryOp::NOT_EQUAL: return builder->CreateICmpNE(left, right);
+                case BinaryOp::GREATER: return builder->CreateICmpSGT(left, right);
+                case BinaryOp::GREATER_EQUAL: return builder->CreateICmpSGE(left, right);
+                case BinaryOp::LESS: return builder->CreateICmpSLT(left, right);
+                case BinaryOp::AND: return builder->CreateAnd(left, right);
+                case BinaryOp::OR: return builder->CreateOr(left, right);
+                default: throw std::runtime_error("Unreachable");
+            }
+        }
+        // Existing arithmetic operators
         Value* left = generateValue(binOp->left.get(), expectedType);
         Value* right = generateValue(binOp->right.get(), expectedType);
-    
         switch (binOp->op) {
             case BinaryOp::ADD:
                 return expectedType->isFloatTy() ? builder->CreateFAdd(left, right)
-                                                 : builder->CreateAdd(left, right);
+                                                : builder->CreateAdd(left, right);
             case BinaryOp::SUBTRACT:
                 return expectedType->isFloatTy() ? builder->CreateFSub(left, right)
-                                                 : builder->CreateSub(left, right);
+                                                : builder->CreateSub(left, right);
             case BinaryOp::MULTIPLY:
                 return expectedType->isFloatTy() ? builder->CreateFMul(left, right)
-                                                 : builder->CreateMul(left, right);
+                                                : builder->CreateMul(left, right);
             case BinaryOp::DIVIDE:
                 return expectedType->isFloatTy() ? builder->CreateFDiv(left, right)
-                                                 : builder->CreateSDiv(left, right); // Signed integer division
+                                                : builder->CreateSDiv(left, right);
             default:
                 throw std::runtime_error("Unsupported binary operator");
         }

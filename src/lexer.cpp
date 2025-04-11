@@ -70,10 +70,11 @@ Token Lexer::nextToken() {
     if (pos >= source.size()) return {Token::Eof, "", line, column};
     
     char c = source[pos];
+    
     size_t token_start_column = column;
     
     if (std::isalpha(c)) {
-        size_t start = pos;
+        size_t start = pos; ///////////////////////////////
         pos++;
         column++;
         while (pos < source.size() && std::isalnum(source[pos])) {
@@ -88,6 +89,8 @@ Token Lexer::nextToken() {
         if (lexeme == "true" || lexeme == "false") return {Token::BoolLiteral, lexeme, line, column};
         if (lexeme == "float") return {Token::Float, "", line, column};
         if (lexeme == "char") return {Token::Char, "", line, column};
+        if (lexeme == "if") return {Token::If, "", line, column};
+        if (lexeme == "else") return {Token::Else, "", line, column};
         // if (lexeme.size() == 1) return {Token::CharLiteral, lexeme, line, column};
 
         //          add other keywords           //
@@ -97,23 +100,101 @@ Token Lexer::nextToken() {
     
     
     //  float  and int
-    if (std::isdigit(c)) {
+    if (std::isdigit(c) || c == '-' || c == '+') {
+        
+        
         size_t start = pos;
-        bool hasDot = false;
-        while (pos < source.size() && (std::isdigit(source[pos]) || source[pos] == '.')) {
-            if (source[pos] == '.') hasDot = true;
+        if (c == '+' || c == '-') {
             pos++;
             column++;
+            if(!std::isdigit(peek())){
+                // pos++; column++;
+                if (peek() == '=') {
+                    pos++; column++;
+                    return {Token::MinusEqual, "", line, column};
+                }
+                return {Token::Minus, "", line, column};
+            }else{
+                bool hasDot = false;
+                // if source[pos] != digit return syntax err
+                while (pos < source.size() && (std::isdigit(source[pos]) || source[pos] == '.')) {
+                    if (source[pos] == '.') hasDot = true;
+                    pos++;
+                    column++;
+                }
+                std::string num = source.substr(start, pos - start);
+                // std::cout << num << std::endl;
+
+                return {hasDot ? Token::FloatLiteral : Token::IntLiteral, num, line, column};
+            }
+            // c = source[pos]; // update c after consuming sign
+        }else{
+            bool hasDot = false;
+            // if source[pos] != digit return syntax err
+            while (pos < source.size() && (std::isdigit(source[pos]) || source[pos] == '.')) {
+                if (source[pos] == '.') hasDot = true;
+                pos++;
+                column++;
+            }
+            std::string num = source.substr(start, pos - start);
+            // std::cout << num << std::endl;
+
+            return {hasDot ? Token::FloatLiteral : Token::IntLiteral, num, line, column};
         }
-        std::string num = source.substr(start, pos - start);
-        // std::cout << num << std::endl;
-        return {hasDot ? Token::FloatLiteral : Token::IntLiteral, num, line, column};
     }
     
     if (c == '=') {
-        pos++;
-        column++;
+        pos++; column++;
+        if (peek() == '=') {
+            pos++; column++;
+            return {Token::EqualEqual, "", line, column};
+        }
         return {Token::Equal, "", line, column};
+    }
+
+    if (c == '<') {
+        pos++; column++;
+        if (peek() == '=') {
+            pos++; column++;
+            return {Token::LessEqual, "", line, column};
+        }
+        return {Token::Less, "", line, column};
+    }
+
+    if (c == '>') {
+        pos++; column++;
+        if (peek() == '=') {
+            pos++; column++;
+            return {Token::GreaterEqual, "", line, column};
+        }
+        return {Token::Greater, "", line, column};
+    }
+
+    if (c == '!') {
+        pos++; column++;
+        if (peek() == '=') {
+            pos++; column++;
+            return {Token::NotEqual, "", line, column};
+        }
+        // not defined yet. in case of use will return error
+    }
+
+    if (c == '&') {
+        pos++; column++;
+        if (peek() == '&') {
+            pos++; column++;
+            return {Token::And, "", line, column};
+        }
+        // not defined yet. in case of use will return error
+    }
+
+    if (c == '|') {
+        pos++; column++;
+        if (peek() == '|') {
+            pos++; column++;
+            return {Token::Or, "", line, column};
+        }
+        // not defined yet. in case of use will return error
     }
 
     if (c == ',') {
@@ -121,7 +202,31 @@ Token Lexer::nextToken() {
         column++;
         return {Token::Comma, "", line, column};
     }
+
+    if (c == '(') {
+        pos++;
+        column++;
+        return {Token::LeftParen, "", line, column};
+    }
     
+    if (c == ')') {
+        pos++;
+        column++;
+        return {Token::RightParen, "", line, column};
+    }
+
+    if (c == '{') {
+        pos++;
+        column++;
+        return {Token::LeftBrace, "", line, column};
+    }
+
+    if (c == '}') {
+        pos++;
+        column++;
+        return {Token::RightBrace, "", line, column};
+    }
+
     if (c == ';') {
         pos++;
         column++;
@@ -158,15 +263,6 @@ Token Lexer::nextToken() {
             return {Token::PlusEqual, "", line, column};
         }
         return {Token::Plus, "", line, column};
-    }
-    
-    if (c == '-') {
-        pos++; column++;
-        if (peek() == '=') {
-            pos++; column++;
-            return {Token::MinusEqual, "", line, column};
-        }
-        return {Token::Minus, "", line, column};
     }
     
     if (c == '*') {

@@ -89,6 +89,7 @@
     "__node_handle": "cpp",
     "bitset": "cpp",
     "deque": "cpp",
-    "locale": "cpp"
+    "locale": "cpp",
+    "iostream": "cpp"
   }
 }

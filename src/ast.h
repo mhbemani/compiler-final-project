@@ -6,8 +6,9 @@
 #include <string>
 
 enum class VarType { INT, STRING, BOOL, FLOAT, CHAR };
-enum class BinaryOp { ADD, SUBTRACT, MULTIPLY, DIVIDE };
-
+enum class BinaryOp { ADD, SUBTRACT, MULTIPLY, DIVIDE, EQUAL,
+     NOT_EQUAL, LESS, LESS_EQUAL, GREATER, GREATER_EQUAL, AND, OR };
+// enum class LogicalOp { EQUAL, NOT_EQUAL, LESS, LESS_EQUAL, GREATER, GREATER_EQUAL };
 class ASTNode {
 public:
     virtual ~ASTNode() = default;
@@ -101,4 +102,39 @@ class CompoundAssignNode : public ASTNode {
         std::unique_ptr<ASTNode> value;
 };
 
+struct IfNode : public ASTNode {
+    std::unique_ptr<ASTNode> condition;
+    std::vector<std::unique_ptr<ASTNode>> ifBody;
+    std::vector<std::vector<std::unique_ptr<ASTNode>>> elseBodies;
+
+    IfNode(std::unique_ptr<ASTNode> cond) : condition(std::move(cond)) {}
+};
+
+class BlockNode : public ASTNode {
+    public:
+        std::vector<std::unique_ptr<ASTNode>> statements;
+    
+        BlockNode() = default;
+};
+    
+class IfElseNode : public ASTNode {
+    public:
+        // Unified constructor for all if variants
+        IfElseNode(std::unique_ptr<ASTNode> condition,
+                   std::unique_ptr<ASTNode> then_block,
+                   std::unique_ptr<ASTNode> else_block = nullptr)
+            : condition(std::move(condition)),
+              then_block(std::move(then_block)),
+              else_block(std::move(else_block)) {}
+    
+        // Accessors
+        bool hasElseBlock() const { return else_block != nullptr; }
+        bool isElseIf() const {
+            return hasElseBlock() && dynamic_cast<IfElseNode*>(else_block.get());
+        }
+    
+        std::unique_ptr<ASTNode> condition;
+        std::unique_ptr<ASTNode> then_block;
+        std::unique_ptr<ASTNode> else_block;  // Can be BlockNode or another IfElseNode
+    };
 #endif
