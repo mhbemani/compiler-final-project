@@ -12,6 +12,9 @@ struct Token {
         Float,
         Char,
         Print,
+        For,
+        Foreach,
+        In,
         /* signs begin */ 
         Equal, 
         DoubleQuotation,

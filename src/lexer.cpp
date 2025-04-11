@@ -92,6 +92,9 @@ Token Lexer::nextToken() {
         if (lexeme == "if") return {Token::If, "", line, column};
         if (lexeme == "else") return {Token::Else, "", line, column};
         if (lexeme == "print") return {Token::Print, "", line, column};
+        if (lexeme == "for") return {Token::For, "", line, column};
+        if (lexeme == "foreach") return {Token::Foreach, "", line, column};
+        if (lexeme == "in") return {Token::In, "", line, column};
         // if (lexeme.size() == 1) return {Token::CharLiteral, lexeme, line, column};
 
         //          add other keywords           //

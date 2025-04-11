@@ -25,6 +25,7 @@ private:
     std::unique_ptr<ASTNode> parseIfStatement();
     // std::unique_ptr<ASTNode> parseLogicalExpression();
     std::unique_ptr<BlockNode> parseBlock();
+    std::unique_ptr<ASTNode> parseLoop();
     ///////////////////////////////
     
     std::unique_ptr<ASTNode> parseVarDeclMultiVariable(VarType type, std::string name); // int a , b = 10;

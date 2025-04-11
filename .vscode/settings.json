@@ -90,6 +90,7 @@
     "bitset": "cpp",
     "deque": "cpp",
     "locale": "cpp",
-    "iostream": "cpp"
+    "iostream": "cpp",
+    "__config": "cpp"
   }
 }

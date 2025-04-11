@@ -54,7 +54,11 @@ void CodeGen::generateStatement(ASTNode* node) {
         generateIfElse(ifElseNode); // Call the updated generateIfElse
     } else if (auto print = dynamic_cast<PrintNode*>(node)) {  // New case
         generatePrint(print);
-    } else {
+    } else if (auto loop = dynamic_cast<LoopNode*>(node)) {
+        generateLoop(loop);
+    } else if (auto block = dynamic_cast<BlockNode*>(node)) { // New case
+        generateBlock(block);
+    }else {
         throw std::runtime_error("Unknown statement type");
     }
 }
@@ -236,6 +240,64 @@ void CodeGen::generateBlock(BlockNode* blockNode) {
     // Iterate through all the statements in the block and generate them
     for (auto& statement : blockNode->statements) {
         generateStatement(statement.get());
+    }
+}
+
+void CodeGen::generateLoop(LoopNode* node) {
+    Function* func = builder->GetInsertBlock()->getParent();
+    BasicBlock* loopStart = BasicBlock::Create(*context, "loop_start", func);
+    BasicBlock* loopBody = BasicBlock::Create(*context, "loop_body", func);
+    BasicBlock* loopEnd = BasicBlock::Create(*context, "loop_end", func);
+
+    if (node->type == LoopType::For) {
+        if (node->init) generateStatement(node->init.get());
+        builder->CreateBr(loopStart);
+
+        builder->SetInsertPoint(loopStart);
+        Value* cond = node->condition ? generateValue(node->condition.get(), Type::getInt1Ty(*context))
+                                      : ConstantInt::getTrue(*context);
+        builder->CreateCondBr(cond, loopBody, loopEnd);
+
+        builder->SetInsertPoint(loopBody);
+        generateStatement(node->body.get());
+        if (node->update) generateStatement(node->update.get());
+        builder->CreateBr(loopStart);
+
+        builder->SetInsertPoint(loopEnd);
+    } else { // Foreach
+        auto it = symbols.find(node->collectionName);
+        if (it == symbols.end()) throw std::runtime_error("Undeclared collection: " + node->collectionName);
+        AllocaInst* arrayPtr = it->second; // Directly AllocaInst* from symbols
+
+        Type* arrayType = arrayPtr->getAllocatedType();
+        if (!arrayType->isArrayTy() && !arrayType->isPointerTy()) {
+            throw std::runtime_error("Foreach collection '" + node->collectionName + "' must be an array or pointer");
+        }
+        uint64_t arraySize = arrayType->isArrayTy() ? arrayType->getArrayNumElements() : 5; // Fallback for pointers
+
+        AllocaInst* index = builder->CreateAlloca(Type::getInt32Ty(*context), nullptr, "index");
+        builder->CreateStore(ConstantInt::get(Type::getInt32Ty(*context), 0), index);
+        AllocaInst* var = builder->CreateAlloca(Type::getInt32Ty(*context), nullptr, node->varName);
+        symbols[node->varName] = var;
+        builder->CreateBr(loopStart);
+
+        builder->SetInsertPoint(loopStart);
+        Value* idx = builder->CreateLoad(Type::getInt32Ty(*context), index);
+        Value* cond = builder->CreateICmpSLT(idx, ConstantInt::get(Type::getInt32Ty(*context), arraySize));
+        builder->CreateCondBr(cond, loopBody, loopEnd);
+
+        builder->SetInsertPoint(loopBody);
+        Value* elementPtr = builder->CreateGEP(Type::getInt32Ty(*context), arrayPtr, idx);
+        Value* element = builder->CreateLoad(Type::getInt32Ty(*context), elementPtr);
+        builder->CreateStore(element, var);
+        generateStatement(node->body.get());
+        Value* nextIdx = builder->CreateAdd(idx, ConstantInt::get(Type::getInt32Ty(*context), 1));
+        builder->CreateStore(nextIdx, index);
+        builder->CreateBr(loopStart);
+
+        builder->SetInsertPoint(loopEnd);
+        symbols.erase(node->varName);
+        symbols.erase("index");
     }
 }
 

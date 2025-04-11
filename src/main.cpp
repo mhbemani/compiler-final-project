@@ -4,11 +4,16 @@
 #include <iostream>
 /*
     to run it in lli:
-    -  copy llvm ir output in main.ll
-    -  llc -filetype=obj main.ll -o main.o
-    -  clang main.o -o main
-    -  ./main
+       copy llvm ir output in main.ll
+       llc -filetype=obj main.ll -o main.o
+       clang main.o -o main
+       ./main
 */
+
+// no support for "bool a = true, f, s = false;" structure
+// no -(z/2)
+// bug in for-loop when running
+// no array available to test foreach
 int main(int argc, char* argv[]) {
     std::string source = argv[1];  // Changed this line only
     

@@ -34,7 +34,11 @@ std::unique_ptr<ASTNode> Parser::parseStatement() {
         return parseVarDecl();
     }
     if (currentToken.type == Token::Ident) {
-        return parseAssignment();
+        auto tempreturn = parseAssignment();
+        if (currentToken.type != Token::Semicolon) {
+            throw std::runtime_error("Expected ';' after assignment");
+        }
+        return tempreturn;
     }
     if (currentToken.type == Token::If) {
         return parseIfStatement();
@@ -56,6 +60,10 @@ std::unique_ptr<ASTNode> Parser::parseStatement() {
         advance(); // Consume ';'
         return std::make_unique<PrintNode>(std::move(expr));
     }
+    if (currentToken.type == Token::For || currentToken.type == Token::Foreach) {
+        return parseLoop();
+    }
+    
     // std::cout << "currentToken.type" << std::endl;
 
 
@@ -326,10 +334,10 @@ std::unique_ptr<ASTNode> Parser::parseAssignment() {
    
     auto value = parseExpression(); // new
 
-    if (currentToken.type != Token::Semicolon) {
-        throw std::runtime_error("Expected ';' after assignment");
-    }
-    advance(); // Consume ;
+    // if (currentToken.type != Token::Semicolon) {
+    //     throw std::runtime_error("Expected ';' after assignment");
+    // }
+    // advance(); // Consume ;
 
     if (isCompound) {
         return std::make_unique<CompoundAssignNode>(name, compoundOp, std::move(value));
@@ -389,11 +397,48 @@ std::unique_ptr<BlockNode> Parser::parseBlock() {
     return block;
 }
 
+std::unique_ptr<ASTNode> Parser::parseLoop() {
+    bool isForeach = (currentToken.type == Token::Foreach);
+    advance(); // Consume 'for' or 'foreach'
+    if (currentToken.type != Token::LeftParen) throw std::runtime_error("Expected '(' after loop keyword");
+    advance(); // Consume '('
+
+    if (isForeach) {
+        if (currentToken.type != Token::Ident) throw std::runtime_error("Expected identifier in foreach");
+        std::string varName = currentToken.lexeme;
+        advance(); // Consume varName
+        if (currentToken.type != Token::In) throw std::runtime_error("Expected 'in' in foreach");
+        advance(); // Consume 'in'
+        if (currentToken.type != Token::Ident) throw std::runtime_error("Expected collection identifier after 'in'");
+        std::string collectionName = currentToken.lexeme;
+        advance(); // Consume collectionName
+        if (currentToken.type != Token::RightParen) throw std::runtime_error("Expected ')' after foreach");
+        advance(); // Consume ')'
+        auto body = parseBlock();
+        return std::make_unique<LoopNode>(varName, collectionName, std::move(body));
+    } else {
+        std::unique_ptr<ASTNode> init = nullptr;
+        if (currentToken.type == Token::Int) {
+            init = parseVarDecl(); // e.g., int i = 0
+        } else if (currentToken.type == Token::Ident) {
+            init = parseAssignment(); // e.g., i = 0
+        } 
+        // else if (currentToken.type != Token::Semicolon) {
+        //     throw std::runtime_error("Expected declaration, assignment, or ';' in for init");
+        // }
+        if (currentToken.type != Token::Semicolon) throw std::runtime_error("Expected ';' after init");
+        advance(); // Consume ';'
+        auto condition = currentToken.type == Token::Semicolon ? nullptr : parseExpression();
+        if (currentToken.type != Token::Semicolon) throw std::runtime_error("Expected ';' after condition");
+        advance(); // Consume ';'
+        auto update = currentToken.type == Token::RightParen ? nullptr : parseAssignment(); // expression changed to assignment
+        if (currentToken.type != Token::RightParen) throw std::runtime_error("Expected ')' after update");
+        advance(); // Consume ')'
+        auto body = parseBlock();
+        return std::make_unique<LoopNode>(std::move(init), std::move(condition), std::move(update), std::move(body));
+    }
+}
 //std::unique_ptr<ASTNode> Parser::parseUnaryOperator()  x++
-
-//std::unique_ptr<ASTNode> Parser::parseFor()
-
-//std::unique_ptr<ASTNode> Parser::parseForEach()
     // String::functions
 //std::unique_ptr<ASTNode> Parser::parseConcat()
     // math::functions

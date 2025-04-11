@@ -5,7 +5,7 @@
 #include <vector>
 #include <string>
 
-enum class VarType { INT, STRING, BOOL, FLOAT, CHAR };
+enum class VarType { INT, STRING, BOOL, FLOAT, CHAR, NEUTRAL };
 enum class BinaryOp { ADD, SUBTRACT, MULTIPLY, DIVIDE, EQUAL,
      NOT_EQUAL, LESS, LESS_EQUAL, GREATER, GREATER_EQUAL, AND, OR };
 enum class LoopType { For, Foreach };
