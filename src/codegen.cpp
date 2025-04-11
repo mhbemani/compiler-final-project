@@ -12,7 +12,9 @@ CodeGen::CodeGen() :
     // Create main function
     FunctionType* mainType = FunctionType::get(Type::getInt32Ty(*context), false);
     Function* mainFunc = Function::Create(mainType, Function::ExternalLinkage, "main", *module);
-    
+    FunctionType* printfType = FunctionType::get(Type::getInt32Ty(*context),
+                                                {PointerType::get(Type::getInt8Ty(*context), 0)}, true);
+    printfFunc = Function::Create(printfType, Function::ExternalLinkage, "printf", module.get());
     // Create entry block
     BasicBlock* entry = BasicBlock::Create(*context, "entry", mainFunc);
     builder->SetInsertPoint(entry);
@@ -50,6 +52,10 @@ void CodeGen::generateStatement(ASTNode* node) {
     } else if (auto ifElseNode = dynamic_cast<IfElseNode*>(node)) {
         // Handle if-else statement
         generateIfElse(ifElseNode); // Call the updated generateIfElse
+    } else if (auto print = dynamic_cast<PrintNode*>(node)) {  // New case
+        generatePrint(print);
+    } else {
+        throw std::runtime_error("Unknown statement type");
     }
 }
 
@@ -174,7 +180,57 @@ void CodeGen::generateIfElse(IfElseNode* node) {
     builder->SetInsertPoint(afterIfElseBlock);
 }
 
+void CodeGen::generatePrint(PrintNode* node) {
+    Value* value = nullptr;
+    Type* valueType = nullptr;
 
+    if (dynamic_cast<IntLiteral*>(node->expr.get()) || dynamic_cast<VarRefNode*>(node->expr.get()) ||
+        dynamic_cast<BinaryOpNode*>(node->expr.get())) {
+        if (auto binOp = dynamic_cast<BinaryOpNode*>(node->expr.get())) {
+            if (binOp->op == BinaryOp::EQUAL || binOp->op == BinaryOp::LESS_EQUAL ||
+                binOp->op == BinaryOp::NOT_EQUAL || binOp->op == BinaryOp::GREATER ||
+                binOp->op == BinaryOp::GREATER_EQUAL || binOp->op == BinaryOp::LESS ||
+                binOp->op == BinaryOp::AND || binOp->op == BinaryOp::OR) {
+                value = generateValue(node->expr.get(), Type::getInt1Ty(*context));
+                valueType = Type::getInt1Ty(*context);
+            } else {
+                value = generateValue(node->expr.get(), Type::getInt32Ty(*context));
+                valueType = Type::getInt32Ty(*context);
+            }
+        } else {
+            value = generateValue(node->expr.get(), Type::getInt32Ty(*context));
+            valueType = Type::getInt32Ty(*context);
+        }
+    }
+    else if (auto strLit = dynamic_cast<StrLiteral*>(node->expr.get())) {
+        value = generateValue(node->expr.get(), PointerType::get(Type::getInt8Ty(*context), 0));
+        valueType = PointerType::get(Type::getInt8Ty(*context), 0);
+    }
+    else {
+        throw std::runtime_error("Unsupported type in print()");
+    }
+
+    // Reuse format strings
+    static Value* intFormat = nullptr;
+    static Value* strFormat = nullptr;
+    if (!intFormat) {
+        intFormat = builder->CreateGlobalStringPtr("%d\n");
+    }
+    if (!strFormat && valueType->isPointerTy()) {
+        strFormat = builder->CreateGlobalStringPtr("%s\n");
+    }
+
+    Value* formatPtr = valueType->isPointerTy() ? strFormat : intFormat;
+    std::vector<Value*> args = {formatPtr, value};
+
+    // Local printf declaration
+    FunctionType* printfType = FunctionType::get(Type::getInt32Ty(*context),
+                                                {PointerType::get(Type::getInt8Ty(*context), 0)}, true);
+    // Use getOrInsertFunction correctly
+    auto printfCallee = module->getOrInsertFunction("printf", printfType);
+    Function* printfFunc = cast<Function>(printfCallee.getCallee());
+    builder->CreateCall(printfFunc, args);
+}
 
 void CodeGen::generateBlock(BlockNode* blockNode) {
     // Iterate through all the statements in the block and generate them

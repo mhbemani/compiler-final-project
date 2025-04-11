@@ -8,6 +8,7 @@
 enum class VarType { INT, STRING, BOOL, FLOAT, CHAR };
 enum class BinaryOp { ADD, SUBTRACT, MULTIPLY, DIVIDE, EQUAL,
      NOT_EQUAL, LESS, LESS_EQUAL, GREATER, GREATER_EQUAL, AND, OR };
+enum class LoopType { For, Foreach };
 // enum class LogicalOp { EQUAL, NOT_EQUAL, LESS, LESS_EQUAL, GREATER, GREATER_EQUAL };
 class ASTNode {
 public:
@@ -101,22 +102,12 @@ class CompoundAssignNode : public ASTNode {
         BinaryOp op;
         std::unique_ptr<ASTNode> value;
 };
-
-struct IfNode : public ASTNode {
-    std::unique_ptr<ASTNode> condition;
-    std::vector<std::unique_ptr<ASTNode>> ifBody;
-    std::vector<std::vector<std::unique_ptr<ASTNode>>> elseBodies;
-
-    IfNode(std::unique_ptr<ASTNode> cond) : condition(std::move(cond)) {}
-};
-
 class BlockNode : public ASTNode {
     public:
         std::vector<std::unique_ptr<ASTNode>> statements;
     
         BlockNode() = default;
-};
-    
+};    
 class IfElseNode : public ASTNode {
     public:
         // Unified constructor for all if variants
@@ -137,4 +128,36 @@ class IfElseNode : public ASTNode {
         std::unique_ptr<ASTNode> then_block;
         std::unique_ptr<ASTNode> else_block;  // Can be BlockNode or another IfElseNode
     };
+
+class PrintNode : public ASTNode {
+    public:
+        std::unique_ptr<ASTNode> expr;  // Expression to print (literal, var, or operation)
+        PrintNode(std::unique_ptr<ASTNode> expr) : expr(std::move(expr)) {}
+};
+
+class LoopNode : public ASTNode {
+    public:
+        LoopType type;
+        // For 'for' loop
+        std::unique_ptr<ASTNode> init;      // Optional: VarDeclNode or AssignNode
+        std::unique_ptr<ASTNode> condition; // Optional: Expression
+        std::unique_ptr<ASTNode> update;    // Optional: Expression
+        // For 'foreach' loop
+        std::string varName;                // Optional: Loop variable (e.g., x)
+        std::string collectionName;         // Optional: Collection identifier (e.g., y)
+        // Common
+        std::unique_ptr<ASTNode> body;      // Required: BlockNode
+    
+        // Constructor for 'for'
+        LoopNode(std::unique_ptr<ASTNode> init, std::unique_ptr<ASTNode> condition,
+                 std::unique_ptr<ASTNode> update, std::unique_ptr<ASTNode> body)
+            : type(LoopType::For), init(std::move(init)), condition(std::move(condition)),
+              update(std::move(update)), body(std::move(body)) {}
+    
+        // Constructor for 'foreach'
+        LoopNode(std::string varName, std::string collectionName, std::unique_ptr<ASTNode> body)
+            : type(LoopType::Foreach), varName(std::move(varName)), 
+              collectionName(std::move(collectionName)), body(std::move(body)) {}
+};
+
 #endif

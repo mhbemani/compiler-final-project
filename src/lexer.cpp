@@ -91,6 +91,7 @@ Token Lexer::nextToken() {
         if (lexeme == "char") return {Token::Char, "", line, column};
         if (lexeme == "if") return {Token::If, "", line, column};
         if (lexeme == "else") return {Token::Else, "", line, column};
+        if (lexeme == "print") return {Token::Print, "", line, column};
         // if (lexeme.size() == 1) return {Token::CharLiteral, lexeme, line, column};
 
         //          add other keywords           //

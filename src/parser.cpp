@@ -39,6 +39,23 @@ std::unique_ptr<ASTNode> Parser::parseStatement() {
     if (currentToken.type == Token::If) {
         return parseIfStatement();
     }
+    if (currentToken.type == Token::Print) {  // New case
+        advance(); // Consume 'print'
+        if (currentToken.type != Token::LeftParen) {
+            throw std::runtime_error("Expected '(' after 'print'");
+        }
+        advance(); // Consume '('
+        auto expr = parseExpression(); // Parse the expression inside print()
+        if (currentToken.type != Token::RightParen) {
+            throw std::runtime_error("Expected ')' after print expression");
+        }
+        advance(); // Consume ')'
+        if (currentToken.type != Token::Semicolon) {
+            throw std::runtime_error("Expected ';' after print statement");
+        }
+        advance(); // Consume ';'
+        return std::make_unique<PrintNode>(std::move(expr));
+    }
     // std::cout << "currentToken.type" << std::endl;
 
 
@@ -356,8 +373,6 @@ std::unique_ptr<ASTNode> Parser::parseIfStatement() {
     return std::make_unique<IfElseNode>(std::move(condition), std::move(thenBlock), std::move(elseBlock));
 }
 
-
-
 std::unique_ptr<BlockNode> Parser::parseBlock() {
     if (currentToken.type != Token::LeftBrace) {
         throw std::runtime_error("Expected '{' to start block");
@@ -374,36 +389,11 @@ std::unique_ptr<BlockNode> Parser::parseBlock() {
     return block;
 }
 
-
-// std::unique_ptr<ASTNode> Parser::parseLogicalExpression() {
-//     auto left = parsePrimary();
-
-//     LogicalOp op;
-//     switch (currentToken.type) {
-//         case Token::EqualEqual: op = LogicalOp::EQUAL; break;
-//         case Token::NotEqual: op = LogicalOp::NOT_EQUAL; break;
-//         case Token::Less: op = LogicalOp::LESS; break;
-//         case Token::Greater: op = LogicalOp::GREATER; break;
-//         case Token::LessEqual: op = LogicalOp::LESS_EQUAL; break;
-//         case Token::GreaterEqual: op = LogicalOp::GREATER_EQUAL; break;
-//         default: throw std::runtime_error("Expected logical operator");
-//     }
-
-//     advance(); // consume the operator
-//     auto right = parsePrimary();
-
-//     return std::make_unique<LogicalOpNode>(op, std::move(left), std::move(right));
-// }
-
-//std::unique_ptr<ASTNode> Parser::parseLoop()
-
 //std::unique_ptr<ASTNode> Parser::parseUnaryOperator()  x++
 
 //std::unique_ptr<ASTNode> Parser::parseFor()
 
 //std::unique_ptr<ASTNode> Parser::parseForEach()
-
-//std::unique_ptr<ASTNode> Parser::parsePrint()
     // String::functions
 //std::unique_ptr<ASTNode> Parser::parseConcat()
     // math::functions

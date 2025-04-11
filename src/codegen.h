@@ -18,7 +18,7 @@ private:
     std::unique_ptr<llvm::LLVMContext> context;
     std::unique_ptr<llvm::Module> module;
     std::unique_ptr<llvm::IRBuilder<>> builder;
-    
+    llvm::Function* printfFunc; 
     std::unordered_map<std::string, llvm::AllocaInst*> symbols;
     
     void generateStatement(ASTNode* node);
@@ -27,6 +27,7 @@ private:
     void generateCompoundAssign(CompoundAssignNode* node);
     void generateIfElse(IfElseNode* node);
     void generateBlock(BlockNode* blockNode);
+    void generatePrint(PrintNode* node);
     llvm::Value* generateValue(ASTNode* node, llvm::Type* expectedType);
 };
 

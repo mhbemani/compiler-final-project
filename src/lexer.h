@@ -11,6 +11,7 @@ struct Token {
         Bool,
         Float,
         Char,
+        Print,
         /* signs begin */ 
         Equal, 
         DoubleQuotation,
@@ -37,7 +38,7 @@ struct Token {
         GreaterEqual,
         And,
         Or,
-        
+
         If, 
         Else, 
         SlashEqual,

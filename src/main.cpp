@@ -2,7 +2,13 @@
 #include "parser.h"
 #include "codegen.h"
 #include <iostream>
-
+/*
+    to run it in lli:
+    -  copy llvm ir output in main.ll
+    -  llc -filetype=obj main.ll -o main.o
+    -  clang main.o -o main
+    -  ./main
+*/
 int main(int argc, char* argv[]) {
     std::string source = argv[1];  // Changed this line only
     
