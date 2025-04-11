@@ -6,6 +6,7 @@
 #include <string>
 
 enum class VarType { INT, STRING, BOOL, FLOAT, CHAR };
+enum class BinaryOp { ADD, SUBTRACT, MULTIPLY, DIVIDE };
 
 class ASTNode {
 public:
@@ -44,6 +45,12 @@ public:
     std::unique_ptr<ASTNode> value;
 };
 
+class VarRefNode : public ASTNode {
+    public:
+        VarRefNode(std::string name) : name(std::move(name)) {}
+        std::string name;
+};
+    
 class IntLiteral : public ASTNode {
 public:
     IntLiteral(int value) : value(value) {}
@@ -73,4 +80,25 @@ class CharLiteral : public ASTNode {
         CharLiteral(char value) : value(value) {}
         char value;
 };
+
+class BinaryOpNode : public ASTNode {
+    public:
+        BinaryOpNode(BinaryOp op, std::unique_ptr<ASTNode> left, std::unique_ptr<ASTNode> right)
+            : op(op), left(std::move(left)), right(std::move(right)) {}
+    
+        BinaryOp op;
+        std::unique_ptr<ASTNode> left;
+        std::unique_ptr<ASTNode> right;
+};
+
+class CompoundAssignNode : public ASTNode {
+    public:
+        CompoundAssignNode(std::string name, BinaryOp op, std::unique_ptr<ASTNode> value)
+            : name(std::move(name)), op(op), value(std::move(value)) {}
+    
+        std::string name;
+        BinaryOp op;
+        std::unique_ptr<ASTNode> value;
+};
+
 #endif

@@ -1,7 +1,7 @@
 #include "lexer.h"
 #include <cctype>
 #include <iostream>
-
+ //  in tekenizing char we have problems and its desabled for now
 Lexer::Lexer(const std::string& source) : source(source) {}
 
 void Lexer::skipWhitespace() {
@@ -88,23 +88,14 @@ Token Lexer::nextToken() {
         if (lexeme == "true" || lexeme == "false") return {Token::BoolLiteral, lexeme, line, column};
         if (lexeme == "float") return {Token::Float, "", line, column};
         if (lexeme == "char") return {Token::Char, "", line, column};
-        if (lexeme.size() == 1) return {Token::CharLiteral, lexeme, line, column};
+        // if (lexeme.size() == 1) return {Token::CharLiteral, lexeme, line, column};
 
         //          add other keywords           //
 
         return {Token::Ident, lexeme, line, column};
     }
     
-    // if (std::isdigit(c)) {
-    //     size_t start = pos;
-    //     pos++;
-    //     column++;
-    //     while (pos < source.size() && std::isdigit(source[pos])) {
-    //         pos++;
-    //         column++;
-    //     }
-    //     return {Token::IntLiteral, source.substr(start, pos - start), line, column};
-    // }
+    
     //  float  and int
     if (std::isdigit(c)) {
         size_t start = pos;
@@ -118,20 +109,7 @@ Token Lexer::nextToken() {
         // std::cout << num << std::endl;
         return {hasDot ? Token::FloatLiteral : Token::IntLiteral, num, line, column};
     }
-    //   char   //   added
-    // if (c == '\'') {
-    //     pos++;
-    //     column++;
-    //     if (pos < source.size() && source[pos + 1] == '\'') {
-    //         char ch = source[pos];
-    //         pos += 2;
-    //         column += 2;
-    //         return {Token::CharLiteral, std::string(1, ch), line, column};
-    //     } else {
-    //         return {Token::Error, "Invalid char literal", line, column};
-    //     }
-    // }
-
+    
     if (c == '=') {
         pos++;
         column++;
@@ -150,7 +128,6 @@ Token Lexer::nextToken() {
         return {Token::Semicolon, "", line, column};
     }
     
-    // std::cout << "reached here ...\n";
     if (c == '"') {
         pos++;
         column++;
@@ -173,6 +150,42 @@ Token Lexer::nextToken() {
         return {Token::StrLiteral, value, line, column};
     }
     
+    // std::cout << "reached here ...\n";
+    if (c == '+') {
+        pos++; column++;
+        if (peek() == '=') {
+            pos++; column++;
+            return {Token::PlusEqual, "", line, column};
+        }
+        return {Token::Plus, "", line, column};
+    }
+    
+    if (c == '-') {
+        pos++; column++;
+        if (peek() == '=') {
+            pos++; column++;
+            return {Token::MinusEqual, "", line, column};
+        }
+        return {Token::Minus, "", line, column};
+    }
+    
+    if (c == '*') {
+        pos++; column++;
+        if (peek() == '=') {
+            pos++; column++;
+            return {Token::StarEqual, "", line, column};
+        }
+        return {Token::Star, "", line, column};
+    }
+    
+    if (c == '/') {
+        pos++; column++;
+        if (peek() == '=') {
+            pos++; column++;
+            return {Token::SlashEqual, "", line, column};
+        }
+        return {Token::Slash, "", line, column};
+    }
     //        add other operators or anything needed like these           //
 
     pos++;

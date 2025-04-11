@@ -20,6 +20,8 @@ private:
     void advance();
     std::unique_ptr<ASTNode> parseStatement();
     std::unique_ptr<ASTNode> parseVarDecl();
+    std::unique_ptr<ASTNode> parseExpression();
+    std::unique_ptr<ASTNode> parsePrimary();
     ///////////////////////////////
     
     std::unique_ptr<ASTNode> parseVarDeclMultiVariable(VarType type, std::string name); // int a , b = 10;

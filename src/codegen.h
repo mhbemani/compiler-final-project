@@ -24,6 +24,7 @@ private:
     void generateStatement(ASTNode* node);
     void generateVarDecl(VarDeclNode* node);
     void generateAssign(AssignNode* node);
+    void generateCompoundAssign(CompoundAssignNode* node);
     llvm::Value* generateValue(ASTNode* node, llvm::Type* expectedType);
 };
 

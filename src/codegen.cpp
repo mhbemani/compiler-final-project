@@ -45,6 +45,8 @@ void CodeGen::generateStatement(ASTNode* node) {
         generateVarDecl(varDecl);
     } else if (auto assign = dynamic_cast<AssignNode*>(node)) {
         generateAssign(assign);
+    } else if (auto compound = dynamic_cast<CompoundAssignNode*>(node)) { // new
+        generateCompoundAssign(compound);
     }
 }
 
@@ -86,6 +88,49 @@ void CodeGen::generateAssign(AssignNode* node) {
     builder->CreateStore(val, alloca);
 }
 
+void CodeGen::generateCompoundAssign(CompoundAssignNode* node) {
+    auto it = symbols.find(node->name);
+    if (it == symbols.end()) {
+        throw std::runtime_error("Compound assignment to undeclared variable: " + node->name);
+    }
+
+    AllocaInst* alloca = it->second;
+    Type* type = alloca->getAllocatedType();
+
+    // Load current value
+    Value* current = builder->CreateLoad(type, alloca);
+
+    // Evaluate right-hand side
+    Value* rhs = generateValue(node->value.get(), type);
+
+    // Perform the operation
+    Value* result = nullptr;
+    switch (node->op) {
+        case BinaryOp::ADD:
+            result = type->isFloatTy() ? builder->CreateFAdd(current, rhs)
+                                       : builder->CreateAdd(current, rhs);
+            break;
+        case BinaryOp::SUBTRACT:
+            result = type->isFloatTy() ? builder->CreateFSub(current, rhs)
+                                       : builder->CreateSub(current, rhs);
+            break;
+        case BinaryOp::MULTIPLY:
+            result = type->isFloatTy() ? builder->CreateFMul(current, rhs)
+                                       : builder->CreateMul(current, rhs);
+            break;
+        case BinaryOp::DIVIDE:
+            result = type->isFloatTy() ? builder->CreateFDiv(current, rhs)
+                                       : builder->CreateSDiv(current, rhs);  // Signed integer division
+            break;
+        default:
+            throw std::runtime_error("Unsupported compound assignment operator");
+    }
+
+    // Store result back
+    builder->CreateStore(result, alloca);
+}
+
+
 llvm::Value* CodeGen::generateValue(ASTNode* node, llvm::Type* expectedType) {
     if (auto intLit = dynamic_cast<IntLiteral*>(node)) {
         if (expectedType->isIntegerTy()) {
@@ -120,6 +165,38 @@ llvm::Value* CodeGen::generateValue(ASTNode* node, llvm::Type* expectedType) {
             throw std::runtime_error("Expected char (i8) type");
         }
         return ConstantInt::get(Type::getInt8Ty(*context), charLit->value);
+    }
+    else if (auto binOp = dynamic_cast<BinaryOpNode*>(node)) {
+        Value* left = generateValue(binOp->left.get(), expectedType);
+        Value* right = generateValue(binOp->right.get(), expectedType);
+    
+        switch (binOp->op) {
+            case BinaryOp::ADD:
+                return expectedType->isFloatTy() ? builder->CreateFAdd(left, right)
+                                                 : builder->CreateAdd(left, right);
+            case BinaryOp::SUBTRACT:
+                return expectedType->isFloatTy() ? builder->CreateFSub(left, right)
+                                                 : builder->CreateSub(left, right);
+            case BinaryOp::MULTIPLY:
+                return expectedType->isFloatTy() ? builder->CreateFMul(left, right)
+                                                 : builder->CreateMul(left, right);
+            case BinaryOp::DIVIDE:
+                return expectedType->isFloatTy() ? builder->CreateFDiv(left, right)
+                                                 : builder->CreateSDiv(left, right); // Signed integer division
+            default:
+                throw std::runtime_error("Unsupported binary operator");
+        }
+    }
+    else if (auto varRef = dynamic_cast<VarRefNode*>(node)) {
+        auto it = symbols.find(varRef->name);
+        if (it == symbols.end()) {
+            throw std::runtime_error("Undeclared variable: " + varRef->name);
+        }
+        AllocaInst* alloca = it->second;
+        if (alloca->getAllocatedType() != expectedType) {
+            throw std::runtime_error("Type mismatch: variable " + varRef->name + " has a different type");
+        }
+        return builder->CreateLoad(expectedType, alloca);
     }
     throw std::runtime_error("Unsupported value type in code generation");
 }
