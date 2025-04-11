@@ -5,7 +5,7 @@
 #include <vector>
 #include <string>
 
-enum class VarType { INT, STRING, BOOL };
+enum class VarType { INT, STRING, BOOL, FLOAT, CHAR };
 
 class ASTNode {
 public:
@@ -60,6 +60,17 @@ class BoolLiteral : public ASTNode {
     public:
         BoolLiteral(bool value) : value(value) {}
         bool value;
-    };
-    
+};
+
+class FloatLiteral : public ASTNode {
+    public:
+        FloatLiteral(float value) : value(value) {}
+        float value;
+};
+
+class CharLiteral : public ASTNode {
+    public:
+        CharLiteral(char value) : value(value) {}
+        char value;
+};
 #endif

@@ -9,6 +9,8 @@ struct Token {
         StringType, 
         Ident,
         Bool,
+        Float,
+        Char,
         /* signs begin */ 
         Equal, 
         DoubleQuotation,
@@ -18,6 +20,8 @@ struct Token {
         IntLiteral, 
         StrLiteral, 
         BoolLiteral,
+        FloatLiteral,
+        CharLiteral,
         Error
     };
     

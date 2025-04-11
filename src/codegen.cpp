@@ -55,12 +55,13 @@ void CodeGen::generateVarDecl(VarDeclNode* node) {
     
     // Create the appropriate type based on variable type
     Type* type;
-    if (node->type == VarType::INT) {
-        type = Type::getInt32Ty(*context);
-    } else if (node->type == VarType::BOOL) {
-        type = Type::getInt1Ty(*context); // Boolean type in LLVM is i1
-    } else { // STRING
-        type = PointerType::get(Type::getInt8Ty(*context), 0);
+    switch (node->type) {
+        case VarType::INT: type = Type::getInt32Ty(*context); break;
+        case VarType::BOOL: type = Type::getInt1Ty(*context); break;
+        case VarType::FLOAT: type = Type::getFloatTy(*context); break;
+        case VarType::CHAR: type = Type::getInt8Ty(*context); break;
+        case VarType::STRING: type = PointerType::get(Type::getInt8Ty(*context), 0); break;
+        default: throw std::runtime_error("Unknown variable type");
     }
     
     AllocaInst* alloca = builder->CreateAlloca(type, nullptr, node->name);
@@ -87,20 +88,38 @@ void CodeGen::generateAssign(AssignNode* node) {
 
 llvm::Value* CodeGen::generateValue(ASTNode* node, llvm::Type* expectedType) {
     if (auto intLit = dynamic_cast<IntLiteral*>(node)) {
-        if (!expectedType->isIntegerTy()) {
-            throw std::runtime_error("Expected integer type");
+        if (expectedType->isIntegerTy()) {
+            return ConstantInt::get(Type::getInt32Ty(*context), intLit->value);
         }
-        return ConstantInt::get(Type::getInt32Ty(*context), intLit->value);
-    } else if (auto strLit = dynamic_cast<StrLiteral*>(node)) {
+        else if (expectedType->isFloatTy()) {
+            // Implicit int-to-float conversion
+            return ConstantFP::get(Type::getFloatTy(*context), static_cast<double>(intLit->value));
+        }
+        throw std::runtime_error("Type mismatch: cannot convert integer to target type");
+    }
+    else if (auto floatLit = dynamic_cast<FloatLiteral*>(node)) {
+        if (!expectedType->isFloatTy()) {
+            throw std::runtime_error("Expected float type");
+        }
+        return ConstantFP::get(Type::getFloatTy(*context), floatLit->value);
+    }
+    else if (auto strLit = dynamic_cast<StrLiteral*>(node)) {
         if (!expectedType->isPointerTy()) {
             throw std::runtime_error("Expected pointer type for string");
         }
         return builder->CreateGlobalStringPtr(strLit->value);
-    } else if(auto boolLit = dynamic_cast<BoolLiteral*>(node)){
+    }
+    else if (auto boolLit = dynamic_cast<BoolLiteral*>(node)) {
         if (!expectedType->isIntegerTy(1)) {
             throw std::runtime_error("Expected boolean type");
         }
         return ConstantInt::get(Type::getInt1Ty(*context), boolLit->value);
+    }
+    else if (auto charLit = dynamic_cast<CharLiteral*>(node)) {
+        if (!expectedType->isIntegerTy(8)) {
+            throw std::runtime_error("Expected char (i8) type");
+        }
+        return ConstantInt::get(Type::getInt8Ty(*context), charLit->value);
     }
     throw std::runtime_error("Unsupported value type in code generation");
 }

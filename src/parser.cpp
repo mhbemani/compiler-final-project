@@ -26,7 +26,9 @@ std::unique_ptr<ProgramNode> Parser::parseProgram() {
 }
 
 std::unique_ptr<ASTNode> Parser::parseStatement() {
-    if (currentToken.type == Token::Int || currentToken.type == Token::StringType|| currentToken.type == Token::Bool) {
+    if (currentToken.type == Token::Int || currentToken.type == Token::StringType
+        || currentToken.type == Token::Bool || currentToken.type == Token::Float
+        || currentToken.type == Token::Char) {
         return parseVarDecl();
     }
     if (currentToken.type == Token::Ident) {
@@ -37,16 +39,12 @@ std::unique_ptr<ASTNode> Parser::parseStatement() {
 
 std::unique_ptr<ASTNode> Parser::parseVarDecl() {
     VarType type;
-    // detecting type
-    if (currentToken.type == Token::Int) {
-        type = VarType::INT;
-    } else if (currentToken.type == Token::StringType) {
-        type = VarType::STRING;
-    } else if (currentToken.type == Token::Bool) {
-        type = VarType::BOOL;
-    } else {
-        throw std::runtime_error("Expected type in variable declaration");
-    }
+    if (currentToken.type == Token::Int) type = VarType::INT;
+    else if (currentToken.type == Token::StringType) type = VarType::STRING;
+    else if (currentToken.type == Token::Bool) type = VarType::BOOL;
+    else if (currentToken.type == Token::Float) type = VarType::FLOAT;
+    else if (currentToken.type == Token::Char) type = VarType::CHAR;
+    else throw std::runtime_error("Unknown type in variable declaration");
     advance(); // Consume type
     
     if (currentToken.type != Token::Ident) {
@@ -61,6 +59,10 @@ std::unique_ptr<ASTNode> Parser::parseVarDecl() {
     if (currentToken.type == Token::Comma) {
         return parseVarDeclMultiVariable(type, name);
     }
+    if(currentToken.type == Token::Semicolon){
+        advance();
+        return std::make_unique<VarDeclNode>(type, name, nullptr); ///////////////////
+    }
     if (currentToken.type != Token::Equal) {
         throw std::runtime_error("Expected '=' in variable declaration");
     }
@@ -71,19 +73,26 @@ std::unique_ptr<ASTNode> Parser::parseVarDecl() {
     if (type == VarType::INT && currentToken.type == Token::IntLiteral) {
         value = std::make_unique<IntLiteral>(std::stoi(currentToken.lexeme));
         advance();
-    } 
-    else if (type == VarType::STRING && currentToken.type == Token::StrLiteral) {
+    } else if (type == VarType::STRING && currentToken.type == Token::StrLiteral) {
         value = std::make_unique<StrLiteral>(currentToken.lexeme);
         advance();
-    }else if (type == VarType::BOOL && currentToken.type == Token::BoolLiteral) {
-        bool boolValue = (currentToken.lexeme == "true");
-        value = std::make_unique<BoolLiteral>(boolValue); // ← You need to define BoolLiteral if not yet
+    } else if (type == VarType::BOOL && currentToken.type == Token::BoolLiteral) {
+        value = std::make_unique<BoolLiteral>(currentToken.lexeme == "true");
         advance();
-    }else {
+    } else if (type == VarType::FLOAT) {
+        if (currentToken.type == Token::FloatLiteral) {
+            value = std::make_unique<FloatLiteral>(std::stof(currentToken.lexeme));
+        } else if (currentToken.type == Token::IntLiteral) {
+            value = std::make_unique<FloatLiteral>(static_cast<float>(std::stoi(currentToken.lexeme)));
+        } else {
+            throw std::runtime_error("Type mismatch: expected float literal");
+        }
+        advance();
+    } else if (type == VarType::CHAR && currentToken.type == Token::CharLiteral) {
+        value = std::make_unique<CharLiteral>(currentToken.lexeme[0]);
+        advance();
+    } else {
         throw std::runtime_error("Type mismatch in variable declaration");
-    }
-    if (currentToken.type != Token::Semicolon) {
-        throw std::runtime_error("Expected ';' after variable declaration");
     }
     advance(); // Consume ;
     
@@ -128,26 +137,40 @@ std::unique_ptr<ASTNode> Parser::parseVarDeclMultiVariable(VarType type, std::st
     else {
         throw std::runtime_error("Type mismatch in variable declaration");
     }
+    // if (currentToken.type != Token::Semicolon) {
+    //     throw std::runtime_error("Expected ';' after variable declaration");
+    // }
+    // advance(); // Consume ;
+    std::vector<std::unique_ptr<VarDeclNode>> declarations;
+    size_t i = 0;
+
+    while (i < IdentNames.size()) {
+        std::unique_ptr<ASTNode> valueCopy; // New value for each VarDeclNode
+        if (auto* intLit = dynamic_cast<IntLiteral*>(value.get())) {
+            valueCopy = std::make_unique<IntLiteral>(intLit->value); // Deep copy for int
+        } else if (auto* strLit = dynamic_cast<StrLiteral*>(value.get())) {
+            valueCopy = std::make_unique<StrLiteral>(strLit->value); // Deep copy for string
+        } else {
+            throw std::runtime_error("Unsupported value type in declaration");
+        }
+        declarations.emplace_back(std::make_unique<VarDeclNode>(type, IdentNames[i], std::move(valueCopy)));
+        i++;
+    }
+    // if(currentToken.type == Token::Comma){
+    //     auto insideVarDecl = parseVarDecl();
+    //     if (auto multiVarDecl = dynamic_cast<MultiVarDeclNode*>(insideVarDecl)) {
+    //         // Handle multiple variable declarations
+    //         for (auto& decl : multiVarDecl->declarations) {
+    //             // generateVarDecl(decl.get());
+    //         }
+    //     } else if (auto varDecl = dynamic_cast<VarDeclNode*>(node)) {
+    //         // generateVarDecl(varDecl);
+    //     }
+    // }
     if (currentToken.type != Token::Semicolon) {
         throw std::runtime_error("Expected ';' after variable declaration");
     }
     advance(); // Consume ;
-std::vector<std::unique_ptr<VarDeclNode>> declarations;
-size_t i = 0;
-
-while (i < IdentNames.size()) {
-    std::unique_ptr<ASTNode> valueCopy; // New value for each VarDeclNode
-    if (auto* intLit = dynamic_cast<IntLiteral*>(value.get())) {
-        valueCopy = std::make_unique<IntLiteral>(intLit->value); // Deep copy for int
-    } else if (auto* strLit = dynamic_cast<StrLiteral*>(value.get())) {
-        valueCopy = std::make_unique<StrLiteral>(strLit->value); // Deep copy for string
-    } else {
-        throw std::runtime_error("Unsupported value type in declaration");
-    }
-    declarations.emplace_back(std::make_unique<VarDeclNode>(type, IdentNames[i], std::move(valueCopy)));
-    i++;
-}
-    // advance(); // i think it should be here for the next round
 return std::make_unique<MultiVarDeclNode>(std::move(declarations));
 }
 
@@ -178,6 +201,7 @@ std::unique_ptr<ASTNode> Parser::parseVarDeclMultiBoth(VarType type, std::unique
 ///////////////////////////////
 std::unique_ptr<ASTNode> Parser::parseAssignment() {
     std::string name = currentToken.lexeme;
+    auto tempType = currentToken.type;
     advance(); // Consume ident
     
     if (currentToken.type != Token::Equal) {
@@ -186,20 +210,24 @@ std::unique_ptr<ASTNode> Parser::parseAssignment() {
     advance(); // Consume =
     
     std::unique_ptr<ASTNode> value;
-    if (currentToken.type == Token::IntLiteral) {
-        value = std::make_unique<IntLiteral>(std::stoi(currentToken.lexeme));
+    if (currentToken.type == Token::IntLiteral || currentToken.type == Token::FloatLiteral) {
+        float float_val = std::stof(currentToken.lexeme); // Works for both "4" and "4.0"
+        if(tempType == Token::Float){
+            value = std::make_unique<FloatLiteral>(float_val);
+        } else {
+            value = std::make_unique<IntLiteral>(static_cast<int>(float_val));
+        }
         advance();
-    } 
-    else if (currentToken.type == Token::StrLiteral) {
-        value = std::make_unique<StrLiteral>(currentToken.lexeme);
-        advance();
-    } 
-    else {
+    } else if (currentToken.type == Token::StrLiteral) {
+        value = std::make_unique<StrLiteral>(currentToken.lexeme); advance();
+    } else if (currentToken.type == Token::BoolLiteral) {
+        value = std::make_unique<BoolLiteral>(currentToken.lexeme == "true"); advance();
+    }/* else if (currentToken.type == Token::FloatLiteral) {
+        value = std::make_unique<FloatLiteral>(std::stof(currentToken.lexeme)); advance();
+    } */else if (currentToken.type == Token::CharLiteral) {
+        value = std::make_unique<CharLiteral>(currentToken.lexeme[0]); advance();
+    } else {
         throw std::runtime_error("Invalid value in assignment");
-    }
-    
-    if (currentToken.type != Token::Semicolon) {
-        throw std::runtime_error("Expected ';' after assignment");
     }
     advance(); // Consume ;
     
