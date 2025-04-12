@@ -160,4 +160,10 @@ class LoopNode : public ASTNode {
               collectionName(std::move(collectionName)), body(std::move(body)) {}
 };
 
+struct ConcatNode : ASTNode {
+    std::unique_ptr<ASTNode> left;
+    std::unique_ptr<ASTNode> right;
+    ConcatNode(std::unique_ptr<ASTNode> l, std::unique_ptr<ASTNode> r)
+        : left(std::move(l)), right(std::move(r)) {}
+};
 #endif

@@ -15,6 +15,7 @@ struct Token {
         For,
         Foreach,
         In,
+        Concat,
         /* signs begin */ 
         Equal, 
         DoubleQuotation,

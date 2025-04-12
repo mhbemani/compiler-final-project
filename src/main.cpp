@@ -11,7 +11,7 @@
 */
 
 // no support for "bool a = true, f, s = false;" structure
-// no -(z/2)
+// no -(z/2) no i = -1 + 2;
 // bug in for-loop when running
 // no array available to test foreach
 int main(int argc, char* argv[]) {

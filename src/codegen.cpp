@@ -15,6 +15,20 @@ CodeGen::CodeGen() :
     FunctionType* printfType = FunctionType::get(Type::getInt32Ty(*context),
                                                 {PointerType::get(Type::getInt8Ty(*context), 0)}, true);
     printfFunc = Function::Create(printfType, Function::ExternalLinkage, "printf", module.get());
+
+    // Declare string functions for concat
+    Type* int8PtrTy = PointerType::get(Type::getInt8Ty(*context), 0);
+    Type* int32Ty = Type::getInt32Ty(*context);
+    // strlen: i32 (i8*)
+    FunctionType* strlenType = FunctionType::get(int32Ty, {int8PtrTy}, false);
+    Function::Create(strlenType, Function::ExternalLinkage, "strlen", module.get());
+    // malloc: i8* (i32)
+    FunctionType* mallocType = FunctionType::get(int8PtrTy, {int32Ty}, false);
+    Function::Create(mallocType, Function::ExternalLinkage, "malloc", module.get());
+    // memcpy: i8* (i8*, i8*, i32)
+    FunctionType* memcpyType = FunctionType::get(int8PtrTy, {int8PtrTy, int8PtrTy, int32Ty}, false);
+    Function::Create(memcpyType, Function::ExternalLinkage, "memcpy", module.get());
+
     // Create entry block
     BasicBlock* entry = BasicBlock::Create(*context, "entry", mainFunc);
     builder->SetInsertPoint(entry);
@@ -58,6 +72,8 @@ void CodeGen::generateStatement(ASTNode* node) {
         generateLoop(loop);
     } else if (auto block = dynamic_cast<BlockNode*>(node)) { // New case
         generateBlock(block);
+    } else if (auto concat = dynamic_cast<ConcatNode*>(node)) {
+        generateValue(concat, nullptr);
     }else {
         throw std::runtime_error("Unknown statement type");
     }
@@ -188,8 +204,19 @@ void CodeGen::generatePrint(PrintNode* node) {
     Value* value = nullptr;
     Type* valueType = nullptr;
 
-    if (dynamic_cast<IntLiteral*>(node->expr.get()) || dynamic_cast<VarRefNode*>(node->expr.get()) ||
-        dynamic_cast<BinaryOpNode*>(node->expr.get())) {
+    if (dynamic_cast<IntLiteral*>(node->expr.get())) {
+        value = generateValue(node->expr.get(), Type::getInt32Ty(*context));
+        valueType = Type::getInt32Ty(*context);
+    }
+    else if (auto varRef = dynamic_cast<VarRefNode*>(node->expr.get())) {
+        auto it = symbols.find(varRef->name);
+        if (it == symbols.end()) {
+            throw std::runtime_error("Undefined variable: " + varRef->name);
+        }
+        value = generateValue(node->expr.get(), it->second->getAllocatedType());
+        valueType = it->second->getAllocatedType();
+    }
+    else if (dynamic_cast<BinaryOpNode*>(node->expr.get())) {
         if (auto binOp = dynamic_cast<BinaryOpNode*>(node->expr.get())) {
             if (binOp->op == BinaryOp::EQUAL || binOp->op == BinaryOp::LESS_EQUAL ||
                 binOp->op == BinaryOp::NOT_EQUAL || binOp->op == BinaryOp::GREATER ||
@@ -201,12 +228,13 @@ void CodeGen::generatePrint(PrintNode* node) {
                 value = generateValue(node->expr.get(), Type::getInt32Ty(*context));
                 valueType = Type::getInt32Ty(*context);
             }
-        } else {
-            value = generateValue(node->expr.get(), Type::getInt32Ty(*context));
-            valueType = Type::getInt32Ty(*context);
         }
     }
     else if (auto strLit = dynamic_cast<StrLiteral*>(node->expr.get())) {
+        value = generateValue(node->expr.get(), PointerType::get(Type::getInt8Ty(*context), 0));
+        valueType = PointerType::get(Type::getInt8Ty(*context), 0);
+    }
+    else if (auto concat = dynamic_cast<ConcatNode*>(node->expr.get())) {
         value = generateValue(node->expr.get(), PointerType::get(Type::getInt8Ty(*context), 0));
         valueType = PointerType::get(Type::getInt8Ty(*context), 0);
     }
@@ -214,26 +242,62 @@ void CodeGen::generatePrint(PrintNode* node) {
         throw std::runtime_error("Unsupported type in print()");
     }
 
-    // Reuse format strings
-    static Value* intFormat = nullptr;
-    static Value* strFormat = nullptr;
-    if (!intFormat) {
-        intFormat = builder->CreateGlobalStringPtr("%d\n");
+    Type* int32Ty = Type::getInt32Ty(*context);
+    if (valueType == Type::getInt32Ty(*context)) {
+        Constant* formatStr = ConstantDataArray::getString(*context, "%d", true);
+        GlobalVariable* formatGV = new GlobalVariable(
+            *module,
+            formatStr->getType(),
+            true,
+            GlobalValue::PrivateLinkage,
+            formatStr,
+            ".int_fmt"
+        );
+        Value* formatPtr = builder->CreateGEP(
+            formatStr->getType(),
+            formatGV,
+            {ConstantInt::get(int32Ty, 0), ConstantInt::get(int32Ty, 0)},
+            "int_fmt"
+        );
+        builder->CreateCall(module->getFunction("printf"), {formatPtr, value});
     }
-    if (!strFormat && valueType->isPointerTy()) {
-        strFormat = builder->CreateGlobalStringPtr("%s\n");
+    else if (valueType == Type::getInt1Ty(*context)) {
+        Constant* formatStr = ConstantDataArray::getString(*context, "%d", true);
+        GlobalVariable* formatGV = new GlobalVariable(
+            *module,
+            formatStr->getType(),
+            true,
+            GlobalValue::PrivateLinkage,
+            formatStr,
+            ".bool_fmt"
+        );
+        Value* formatPtr = builder->CreateGEP(
+            formatStr->getType(),
+            formatGV,
+            {ConstantInt::get(int32Ty, 0), ConstantInt::get(int32Ty, 0)},
+            "bool_fmt"
+        );
+        Value* extValue = builder->CreateZExt(value, int32Ty, "bool_ext");
+        builder->CreateCall(module->getFunction("printf"), {formatPtr, extValue});
     }
-
-    Value* formatPtr = valueType->isPointerTy() ? strFormat : intFormat;
-    std::vector<Value*> args = {formatPtr, value};
-
-    // Local printf declaration
-    FunctionType* printfType = FunctionType::get(Type::getInt32Ty(*context),
-                                                {PointerType::get(Type::getInt8Ty(*context), 0)}, true);
-    // Use getOrInsertFunction correctly
-    auto printfCallee = module->getOrInsertFunction("printf", printfType);
-    Function* printfFunc = cast<Function>(printfCallee.getCallee());
-    builder->CreateCall(printfFunc, args);
+    else if (valueType == PointerType::get(Type::getInt8Ty(*context), 0)) {
+        Constant* formatStr = ConstantDataArray::getString(*context, "%s", true);
+        GlobalVariable* formatGV = new GlobalVariable(
+            *module,
+            formatStr->getType(),
+            true,
+            GlobalValue::PrivateLinkage,
+            formatStr,
+            ".str_fmt"
+        );
+        Value* formatPtr = builder->CreateGEP(
+            formatStr->getType(),
+            formatGV,
+            {ConstantInt::get(int32Ty, 0), ConstantInt::get(int32Ty, 0)},
+            "str_fmt"
+        );
+        builder->CreateCall(module->getFunction("printf"), {formatPtr, value});
+    }
 }
 
 void CodeGen::generateBlock(BlockNode* blockNode) {
@@ -355,7 +419,7 @@ llvm::Value* CodeGen::generateValue(ASTNode* node, llvm::Type* expectedType) {
                 default: throw std::runtime_error("Unreachable");
             }
         }
-        // Existing arithmetic operators
+        // Arithmetic operators
         Value* left = generateValue(binOp->left.get(), expectedType);
         Value* right = generateValue(binOp->right.get(), expectedType);
         switch (binOp->op) {
@@ -385,6 +449,57 @@ llvm::Value* CodeGen::generateValue(ASTNode* node, llvm::Type* expectedType) {
             throw std::runtime_error("Type mismatch: variable " + varRef->name + " has a different type");
         }
         return builder->CreateLoad(expectedType, alloca);
+    }
+    else if (auto concat = dynamic_cast<ConcatNode*>(node)) {
+        llvm::Type* int8PtrTy = llvm::PointerType::get(llvm::Type::getInt8Ty(*context), 0);
+        llvm::Type* int32Ty = llvm::Type::getInt32Ty(*context);
+
+        // Generate values for left and right expressions
+        llvm::Value* leftStr = generateValue(concat->left.get(), int8PtrTy);
+        llvm::Value* rightStr = generateValue(concat->right.get(), int8PtrTy);
+
+        // Compute lengths
+        llvm::Function* strlenFunc = module->getFunction("strlen");
+        if (!strlenFunc) throw std::runtime_error("strlen function not found");
+        llvm::Value* leftLen = builder->CreateCall(strlenFunc, leftStr, "leftLen");
+        llvm::Value* rightLen = builder->CreateCall(strlenFunc, rightStr, "rightLen");
+
+        // Total length including null terminator
+        llvm::Value* totalLenNoNull = builder->CreateAdd(leftLen, rightLen, "totalLenNoNull");
+        llvm::Value* totalLen = builder->CreateAdd(
+            totalLenNoNull,
+            llvm::ConstantInt::get(int32Ty, 1),
+            "totalLen"
+        );
+
+        // Allocate memory
+        llvm::Function* mallocFunc = module->getFunction("malloc");
+        if (!mallocFunc) throw std::runtime_error("malloc function not found");
+        llvm::Value* resultPtr = builder->CreateCall(mallocFunc, totalLen, "concatResult");
+
+        // Copy left string
+        llvm::Function* memcpyFunc = module->getFunction("memcpy");
+        if (!memcpyFunc) throw std::runtime_error("memcpy function not found");
+        builder->CreateCall(memcpyFunc, {
+            resultPtr,
+            leftStr,
+            builder->CreateAdd(leftLen, llvm::ConstantInt::get(int32Ty, 1))
+        });
+
+        // Copy right string
+        llvm::Value* destPtr = builder->CreateGEP(
+            llvm::Type::getInt8Ty(*context),
+            resultPtr,
+            leftLen,
+            "destOffset"
+        );
+        builder->CreateCall(memcpyFunc, {
+            destPtr,
+            rightStr,
+            builder->CreateAdd(rightLen, llvm::ConstantInt::get(int32Ty, 1))
+        });
+
+        return resultPtr;
     }
     throw std::runtime_error("Unsupported value type in code generation");
 }

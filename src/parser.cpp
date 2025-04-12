@@ -30,7 +30,7 @@ std::unique_ptr<ASTNode> Parser::parseStatement() {
     if (currentToken.type == Token::Int || currentToken.type == Token::StringType
         || currentToken.type == Token::Bool || currentToken.type == Token::Float
         || currentToken.type == Token::Char) {
-            // std::cout << "currentToken.type" << std::endl;
+            // add ; check for all parsestatement just like ident
         return parseVarDecl();
     }
     if (currentToken.type == Token::Ident) {
@@ -38,6 +38,7 @@ std::unique_ptr<ASTNode> Parser::parseStatement() {
         if (currentToken.type != Token::Semicolon) {
             throw std::runtime_error("Expected ';' after assignment");
         }
+        advance();
         return tempreturn;
     }
     if (currentToken.type == Token::If) {
@@ -64,9 +65,9 @@ std::unique_ptr<ASTNode> Parser::parseStatement() {
         return parseLoop();
     }
     
-    // std::cout << "currentToken.type" << std::endl;
+    
 
-
+     std::cout << (currentToken.type == Token::Semicolon) << std::endl;
     throw std::runtime_error("Unexpected token in statement");
 }
 
@@ -85,49 +86,26 @@ std::unique_ptr<ASTNode> Parser::parseVarDecl() {
     }
     std::string name = currentToken.lexeme;
     advance(); // Consume ident
+
     if (currentToken.type == Token::Comma) {
         return parseVarDeclMultiVariable(type, name);
     }
-    if(currentToken.type == Token::Semicolon){
+    if (currentToken.type == Token::Semicolon) {
         advance();
-        return std::make_unique<VarDeclNode>(type, name, nullptr); ///////////////////
+        return std::make_unique<VarDeclNode>(type, name, nullptr);
     }
     if (currentToken.type != Token::Equal) {
         throw std::runtime_error("Expected '=' in variable declaration");
     }
+    advance(); // Consume '='
 
-    advance(); // new
-    //extractiong value
-    std::unique_ptr<ASTNode> value;
-    if (type == VarType::INT && currentToken.type == Token::IntLiteral) {
-        
-        value = parseExpression(); // new
-        // advance();    // deleted
-    } else if (type == VarType::STRING && currentToken.type == Token::StrLiteral) {
-        value = std::make_unique<StrLiteral>(currentToken.lexeme);
-        advance();
-    } else if (type == VarType::BOOL && currentToken.type == Token::BoolLiteral) {
-        value = std::make_unique<BoolLiteral>(currentToken.lexeme == "true");
-        advance();
-    } else if (type == VarType::FLOAT) {
-        if (currentToken.type == Token::FloatLiteral) {
-            value = std::make_unique<FloatLiteral>(std::stof(currentToken.lexeme));
-        } else if (currentToken.type == Token::IntLiteral) {
-            value = std::make_unique<FloatLiteral>(static_cast<float>(std::stoi(currentToken.lexeme)));
-        } else {
-            throw std::runtime_error("Type mismatch: expected float literal");
-        }
-        advance();
-    } else if (type == VarType::CHAR && currentToken.type == Token::CharLiteral) {
-        value = std::make_unique<CharLiteral>(currentToken.lexeme[0]);
-        advance();
-    } else {
-        throw std::runtime_error("Type mismatch in variable declaration(1)");
+    // Parse expression for value
+    std::unique_ptr<ASTNode> value = parseExpression();
+
+    if (currentToken.type != Token::Semicolon) {
+        throw std::runtime_error("Expected ';' after variable declaration");
     }
-    if(currentToken.type != Token::Semicolon){
-        throw std::runtime_error("semicollon expected");
-    }
-    advance(); // Consume ;
+    advance(); // Consume ';'
     
     return std::make_unique<VarDeclNode>(type, name, std::move(value));
 }
@@ -140,8 +118,9 @@ std::unique_ptr<ASTNode> Parser::parseExpression() {
            currentToken.type == Token::EqualEqual || currentToken.type == Token::LessEqual ||
            currentToken.type == Token::NotEqual || currentToken.type == Token::Greater ||
            currentToken.type == Token::GreaterEqual || currentToken.type == Token::Less ||
-           currentToken.type == Token::And || currentToken.type == Token::Or ||
-           currentToken.type == Token::IntLiteral) {
+           currentToken.type == Token::And || currentToken.type == Token::Or
+            // ||currentToken.type == Token::IntLiteral
+        ) {
         BinaryOp op;
         if (currentToken.type != Token::IntLiteral){
             switch (currentToken.type) {
@@ -201,6 +180,29 @@ std::unique_ptr<ASTNode> Parser::parsePrimary() {
         auto node = std::make_unique<VarRefNode>(currentToken.lexeme); // You need a VariableRefNode in your AST
         advance();
         return node;
+    } else if (currentToken.type == Token::Concat) {
+        advance();
+        if (currentToken.type != Token::LeftParen) {
+            throw std::runtime_error("Expected '(' after 'concat'");
+        }
+        advance();
+        auto left = parseExpression();
+        if (!left) {
+            throw std::runtime_error("Expected first argument in concat");
+        }
+        if (currentToken.type != Token::Comma) {
+            throw std::runtime_error("Expected ',' after first argument in concat");
+        }
+        advance();
+        auto right = parseExpression();
+        if (!right) {
+            throw std::runtime_error("Expected second argument in concat");
+        }
+        if (currentToken.type != Token::RightParen) {
+            throw std::runtime_error("Expected ')' after concat arguments");
+        }
+        advance();
+        return std::make_unique<ConcatNode>(std::move(left), std::move(right));
     } else {
         throw std::runtime_error("Expected primary expression");
     }
@@ -438,6 +440,7 @@ std::unique_ptr<ASTNode> Parser::parseLoop() {
         return std::make_unique<LoopNode>(std::move(init), std::move(condition), std::move(update), std::move(body));
     }
 }
+
 //std::unique_ptr<ASTNode> Parser::parseUnaryOperator()  x++
     // String::functions
 //std::unique_ptr<ASTNode> Parser::parseConcat()
