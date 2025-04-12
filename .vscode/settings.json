@@ -91,6 +91,7 @@
     "deque": "cpp",
     "locale": "cpp",
     "iostream": "cpp",
-    "__config": "cpp"
+    "__config": "cpp",
+    "unordered_map": "cpp"
   }
 }

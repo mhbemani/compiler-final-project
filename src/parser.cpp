@@ -29,7 +29,7 @@ std::unique_ptr<ProgramNode> Parser::parseProgram() {
 std::unique_ptr<ASTNode> Parser::parseStatement() {
     if (currentToken.type == Token::Int || currentToken.type == Token::StringType
         || currentToken.type == Token::Bool || currentToken.type == Token::Float
-        || currentToken.type == Token::Char) {
+        || currentToken.type == Token::Char || currentToken.type == Token::Array) {
             // add ; check for all parsestatement just like ident
         return parseVarDecl();
     }
@@ -67,7 +67,7 @@ std::unique_ptr<ASTNode> Parser::parseStatement() {
     
     
 
-     std::cout << (currentToken.type == Token::Semicolon) << std::endl;
+    //  std::cout << (currentToken.type == Token::Semicolon) << std::endl;
     throw std::runtime_error("Unexpected token in statement");
 }
 
@@ -78,6 +78,7 @@ std::unique_ptr<ASTNode> Parser::parseVarDecl() {
     else if (currentToken.type == Token::Bool) type = VarType::BOOL;
     else if (currentToken.type == Token::Float) type = VarType::FLOAT;
     else if (currentToken.type == Token::Char) type = VarType::CHAR;
+    else if (currentToken.type == Token::Array) type = VarType::ARRAY;
     else throw std::runtime_error("Unknown type in variable declaration");
     advance(); // Consume type
     
@@ -118,9 +119,8 @@ std::unique_ptr<ASTNode> Parser::parseExpression() {
            currentToken.type == Token::EqualEqual || currentToken.type == Token::LessEqual ||
            currentToken.type == Token::NotEqual || currentToken.type == Token::Greater ||
            currentToken.type == Token::GreaterEqual || currentToken.type == Token::Less ||
-           currentToken.type == Token::And || currentToken.type == Token::Or
-            ||currentToken.type == Token::SignedIntLiteral
-        ) {
+           currentToken.type == Token::And || currentToken.type == Token::Or ||
+           currentToken.type == Token::SignedIntLiteral ) {
         BinaryOp op;
         if (currentToken.type != Token::SignedIntLiteral){
             switch (currentToken.type) {
@@ -184,6 +184,28 @@ std::unique_ptr<ASTNode> Parser::parsePrimary() {
         auto node = std::make_unique<VarRefNode>(currentToken.lexeme); // You need a VariableRefNode in your AST
         advance();
         return node;
+    } else if (currentToken.type == Token::LeftBracket) { // NEW: Array literal
+        advance(); // Consume '['
+        std::vector<std::unique_ptr<ASTNode>> elements;
+        if (currentToken.type != Token::RightBracket) {
+            do {
+                auto expr = parseExpression();
+                if (!expr || (!dynamic_cast<IntLiteral*>(expr.get()) && !dynamic_cast<VarRefNode*>(expr.get()))) {
+                    throw std::runtime_error("Array elements must be integers or identifiers");
+                }
+                elements.push_back(std::move(expr));
+                if (currentToken.type == Token::Comma) {
+                    advance(); // Consume ','
+                } else {
+                    break;
+                }
+            } while (currentToken.type != Token::RightBracket);
+        }
+        if (currentToken.type != Token::RightBracket) {
+            throw std::runtime_error("Expected ']' after array literal");
+        }
+        advance(); // Consume ']'
+        return std::make_unique<ArrayLiteralNode>(std::move(elements));
     } else if (currentToken.type == Token::Concat) {
         advance();
         if (currentToken.type != Token::LeftParen) {
@@ -254,7 +276,111 @@ std::unique_ptr<ASTNode> Parser::parsePrimary() {
         }
         advance();
         return std::make_unique<BinaryOpNode>(BinaryOp::POW, std::move(base), std::move(exp));
-    } else {
+    } else if (currentToken.type == Token::Length || currentToken.type == Token::Min || currentToken.type == Token::Max) { // NEW: length, min, max
+        UnaryOp op;
+        std::string opName;
+        if (currentToken.type == Token::Length) {
+            op = UnaryOp::LENGTH;
+            opName = "length";
+        } else if (currentToken.type == Token::Min) {
+            op = UnaryOp::MIN;
+            opName = "min";
+        } else {
+            op = UnaryOp::MAX;
+            opName = "max";
+        }
+        advance(); // Consume 'length', 'min', or 'max'
+        if (currentToken.type != Token::LeftParen) {
+            throw std::runtime_error("Expected '(' after '" + opName + "' at line " + std::to_string(currentToken.line));
+        }
+        advance(); // Consume '('
+        auto operand = parseExpression();
+        if (!operand) {
+            throw std::runtime_error("Expected array expression in " + opName + " at line " + std::to_string(currentToken.line));
+        }
+        if (!dynamic_cast<VarRefNode*>(operand.get()) && !dynamic_cast<ArrayLiteralNode*>(operand.get())) {
+            throw std::runtime_error(opName + " argument must be an array or identifier at line " + std::to_string(currentToken.line));
+        }
+        if (currentToken.type != Token::RightParen) {
+            throw std::runtime_error("Expected ')' after " + opName + " argument at line " + std::to_string(currentToken.line));
+        }
+        advance(); // Consume ')'
+        return std::make_unique<UnaryOpNode>(op, std::move(operand));
+    } else if (currentToken.type == Token::Index) { // NEW: index
+        advance(); // Consume 'index'
+        if (currentToken.type != Token::LeftParen) {
+            throw std::runtime_error("Expected '(' after 'index' at line " + std::to_string(currentToken.line));
+        }
+        advance(); // Consume '('
+        auto arr = parseExpression();
+        if (!arr) {
+            throw std::runtime_error("Expected array expression in index at line " + std::to_string(currentToken.line));
+        }
+        if (!dynamic_cast<VarRefNode*>(arr.get()) && !dynamic_cast<ArrayLiteralNode*>(arr.get())) {
+            throw std::runtime_error("index first argument must be an array or identifier at line " + std::to_string(currentToken.line));
+        }
+        if (currentToken.type != Token::Comma) {
+            throw std::runtime_error("Expected ',' after index array at line " + std::to_string(currentToken.line));
+        }
+        advance(); // Consume ','
+        auto idx = parseExpression();
+        if (!idx) {
+            throw std::runtime_error("Expected index expression in index at line " + std::to_string(currentToken.line));
+        }
+        if (!dynamic_cast<IntLiteral*>(idx.get()) && !dynamic_cast<VarRefNode*>(idx.get())) {
+            throw std::runtime_error("index second argument must be an integer or identifier at line " + std::to_string(currentToken.line));
+        }
+        if (currentToken.type != Token::RightParen) {
+            throw std::runtime_error("Expected ')' after index arguments at line " + std::to_string(currentToken.line));
+        }
+        advance(); // Consume ')'
+        return std::make_unique<BinaryOpNode>(BinaryOp::INDEX, std::move(arr), std::move(idx));
+    } else if (currentToken.type == Token::Multiply || currentToken.type == Token::Add ||
+               currentToken.type == Token::Subtract || currentToken.type == Token::Divide) { // NEW: array operations
+        BinaryOp op;
+        std::string opName;
+        if (currentToken.type == Token::Multiply) {
+            op = BinaryOp::MULTIPLY_ARRAY;
+            opName = "multiply";
+        } else if (currentToken.type == Token::Add) {
+            op = BinaryOp::ADD_ARRAY;
+            opName = "add";
+        } else if (currentToken.type == Token::Subtract) {
+            op = BinaryOp::SUBTRACT_ARRAY;
+            opName = "subtract";
+        } else {
+            op = BinaryOp::DIVIDE_ARRAY;
+            opName = "divide";
+        }
+        advance(); // Consume 'multiply', 'add', 'subtract', or 'divide'
+        if (currentToken.type != Token::LeftParen) {
+            throw std::runtime_error("Expected '(' after '" + opName + "' at line " + std::to_string(currentToken.line));
+        }
+        advance(); // Consume '('
+        auto arr1 = parseExpression();
+        if (!arr1) {
+            throw std::runtime_error("Expected first array in " + opName + " at line " + std::to_string(currentToken.line));
+        }
+        if (!dynamic_cast<VarRefNode*>(arr1.get()) && !dynamic_cast<ArrayLiteralNode*>(arr1.get())) {
+            throw std::runtime_error(opName + " first argument must be an array or identifier at line " + std::to_string(currentToken.line));
+        }
+        if (currentToken.type != Token::Comma) {
+            throw std::runtime_error("Expected ',' after first array in " + opName + " at line " + std::to_string(currentToken.line));
+        }
+        advance(); // Consume ','
+        auto arr2 = parseExpression();
+        if (!arr2) {
+            throw std::runtime_error("Expected second array in " + opName + " at line " + std::to_string(currentToken.line));
+        }
+        if (!dynamic_cast<VarRefNode*>(arr2.get()) && !dynamic_cast<ArrayLiteralNode*>(arr2.get())) {
+            throw std::runtime_error(opName + " second argument must be an array or identifier at line " + std::to_string(currentToken.line));
+        }
+        if (currentToken.type != Token::RightParen) {
+            throw std::runtime_error("Expected ')' after " + opName + " arguments at line " + std::to_string(currentToken.line));
+        }
+        advance(); // Consume ')'
+        return std::make_unique<BinaryOpNode>(op, std::move(arr1), std::move(arr2));
+    }else {
         throw std::runtime_error("Expected primary expression");
     }
 }
@@ -290,6 +416,14 @@ std::unique_ptr<ASTNode> Parser::parseVarDeclMultiVariable(VarType type, std::st
         advance();
         if(currentToken.type == Token::Comma) return parseVarDeclMultiBoth(type, std::move(value), IdentNames);
     } 
+    else if (type == VarType::ARRAY && currentToken.type == Token::LeftBracket) { // NEW: Array multi-variable
+        value = parsePrimary(); // Parse array literal
+        if (!dynamic_cast<ArrayLiteralNode*>(value.get())) {
+            throw std::runtime_error("Array initializer must be an array literal");
+        }
+        advance();
+        if (currentToken.type == Token::Comma) return parseVarDeclMultiBoth(type, std::move(value), IdentNames);
+    }
     else {
         throw std::runtime_error("Type mismatch in variable declaration(2)");
     }
@@ -306,23 +440,23 @@ std::unique_ptr<ASTNode> Parser::parseVarDeclMultiVariable(VarType type, std::st
             valueCopy = std::make_unique<IntLiteral>(intLit->value); // Deep copy for int
         } else if (auto* strLit = dynamic_cast<StrLiteral*>(value.get())) {
             valueCopy = std::make_unique<StrLiteral>(strLit->value); // Deep copy for string
+        } else if (auto* arrLit = dynamic_cast<ArrayLiteralNode*>(value.get())) { // NEW: Array copy
+            std::vector<std::unique_ptr<ASTNode>> elementsCopy;
+            for (const auto& elem : arrLit->elements) {
+                if (auto* intLit = dynamic_cast<IntLiteral*>(elem.get())) {
+                    elementsCopy.push_back(std::make_unique<IntLiteral>(intLit->value));
+                } else {
+                    throw std::runtime_error("Array elements must be integers");
+                }
+            }
+            valueCopy = std::make_unique<ArrayLiteralNode>(std::move(elementsCopy));
         } else {
             throw std::runtime_error("Unsupported value type in declaration");
         }
         declarations.emplace_back(std::make_unique<VarDeclNode>(type, IdentNames[i], std::move(valueCopy)));
         i++;
     }
-    // if(currentToken.type == Token::Comma){
-    //     auto insideVarDecl = parseVarDecl();
-    //     if (auto multiVarDecl = dynamic_cast<MultiVarDeclNode*>(insideVarDecl)) {
-    //         // Handle multiple variable declarations
-    //         for (auto& decl : multiVarDecl->declarations) {
-    //             // generateVarDecl(decl.get());
-    //         }
-    //     } else if (auto varDecl = dynamic_cast<VarDeclNode*>(node)) {
-    //         // generateVarDecl(varDecl);
-    //     }
-    // }
+    
     if (currentToken.type != Token::Semicolon) {
         throw std::runtime_error("Expected ';' after variable declaration");
     }
@@ -330,19 +464,27 @@ std::unique_ptr<ASTNode> Parser::parseVarDeclMultiVariable(VarType type, std::st
 return std::make_unique<MultiVarDeclNode>(std::move(declarations));
 }
 
-std::unique_ptr<ASTNode> Parser::parseVarDeclMultiBoth(VarType type, std::unique_ptr<ASTNode> value, std::vector<std::string> IdentNames){
+std::unique_ptr<ASTNode> Parser::parseVarDeclMultiBoth(VarType type, std::unique_ptr<ASTNode> value, std::vector<std::string> IdentNames) {
     std::vector<std::unique_ptr<VarDeclNode>> declarations;
     declarations.emplace_back(std::make_unique<VarDeclNode>(type, IdentNames[0], std::move(value)));
     int i = 1;
-    while(i < IdentNames.size()){
-        if(currentToken.type != Token::Comma){
+    while (i < IdentNames.size()) {
+        if (currentToken.type != Token::Comma) {
             throw std::runtime_error("Type mismatch in variable declaration(3)");
         }
         advance();
-        if(currentToken.type != Token::IntLiteral){
+        if (type == VarType::INT && currentToken.type == Token::IntLiteral) {
+            value = std::make_unique<IntLiteral>(std::stoi(currentToken.lexeme));
+        } else if (type == VarType::STRING && currentToken.type == Token::StrLiteral) {
+            value = std::make_unique<StrLiteral>(currentToken.lexeme);
+        } else if (type == VarType::ARRAY && currentToken.type == Token::LeftBracket) { // NEW: Array literal
+            value = parsePrimary();
+            if (!dynamic_cast<ArrayLiteralNode*>(value.get())) {
+                throw std::runtime_error("Array initializer must be an array literal");
+            }
+        } else {
             throw std::runtime_error("Type mismatch in variable declaration(4)");
         }
-        value = std::make_unique<IntLiteral>(std::stoi(currentToken.lexeme));
         declarations.emplace_back(std::make_unique<VarDeclNode>(type, IdentNames[i], std::move(value)));
         advance();
         i++;
@@ -462,13 +604,12 @@ std::unique_ptr<ASTNode> Parser::parseLoop() {
         advance(); // Consume varName
         if (currentToken.type != Token::In) throw std::runtime_error("Expected 'in' in foreach");
         advance(); // Consume 'in'
-        if (currentToken.type != Token::Ident) throw std::runtime_error("Expected collection identifier after 'in'");
-        std::string collectionName = currentToken.lexeme;
-        advance(); // Consume collectionName
+        auto collection = parseExpression(); // Parse array expression
+        if (!collection) throw std::runtime_error("Expected array expression after 'in'");
         if (currentToken.type != Token::RightParen) throw std::runtime_error("Expected ')' after foreach");
         advance(); // Consume ')'
         auto body = parseBlock();
-        return std::make_unique<LoopNode>(varName, collectionName, std::move(body));
+        return std::make_unique<LoopNode>(varName, std::move(collection), std::move(body));
     } else {
         std::unique_ptr<ASTNode> init = nullptr;
         if (currentToken.type == Token::Int) {
@@ -479,8 +620,8 @@ std::unique_ptr<ASTNode> Parser::parseLoop() {
         // else if (currentToken.type != Token::Semicolon) {
         //     throw std::runtime_error("Expected declaration, assignment, or ';' in for init");
         // }
-        if (currentToken.type != Token::Semicolon) throw std::runtime_error("Expected ';' after init");
-        advance(); // Consume ';'
+        // if (currentToken.type != Token::Semicolon) throw std::runtime_error("Expected ';' after init");
+        // advance(); // Consume ';'
         auto condition = currentToken.type == Token::Semicolon ? nullptr : parseExpression();
         if (currentToken.type != Token::Semicolon) throw std::runtime_error("Expected ';' after condition");
         advance(); // Consume ';'

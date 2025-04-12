@@ -5,10 +5,12 @@
 #include <vector>
 #include <string>
 
-enum class VarType { INT, STRING, BOOL, FLOAT, CHAR, NEUTRAL };
+enum class VarType { INT, STRING, BOOL, FLOAT, CHAR, NEUTRAL, ARRAY };
 enum class BinaryOp { ADD, SUBTRACT, MULTIPLY, DIVIDE, EQUAL, ABS, POW,
-     NOT_EQUAL, LESS, LESS_EQUAL, GREATER, GREATER_EQUAL, AND, OR };
+     NOT_EQUAL, LESS, LESS_EQUAL, GREATER, GREATER_EQUAL, AND, OR , 
+     INDEX, MULTIPLY_ARRAY, ADD_ARRAY, SUBTRACT_ARRAY, DIVIDE_ARRAY };
 enum class LoopType { For, Foreach };
+enum class UnaryOp { LENGTH, MIN, MAX };
 // enum class LogicalOp { EQUAL, NOT_EQUAL, LESS, LESS_EQUAL, GREATER, GREATER_EQUAL };
 class ASTNode {
 public:
@@ -21,7 +23,7 @@ public:
 };
 
 class VarDeclNode : public ASTNode {
-public:
+    public:
     VarDeclNode(VarType type, std::string name, std::unique_ptr<ASTNode> value)
         : type(type), name(std::move(name)), value(std::move(value)) {}
     
@@ -144,7 +146,7 @@ class LoopNode : public ASTNode {
         std::unique_ptr<ASTNode> update;    // Optional: Expression
         // For 'foreach' loop
         std::string varName;                // Optional: Loop variable (e.g., x)
-        std::string collectionName;         // Optional: Collection identifier (e.g., y)
+        std::unique_ptr<ASTNode> collection; // Optional: Collection expression (e.g., nums, multiply(arr, arr))
         // Common
         std::unique_ptr<ASTNode> body;      // Required: BlockNode
     
@@ -155,10 +157,10 @@ class LoopNode : public ASTNode {
               update(std::move(update)), body(std::move(body)) {}
     
         // Constructor for 'foreach'
-        LoopNode(std::string varName, std::string collectionName, std::unique_ptr<ASTNode> body)
+        LoopNode(std::string varName, std::unique_ptr<ASTNode> collection, std::unique_ptr<ASTNode> body)
             : type(LoopType::Foreach), varName(std::move(varName)), 
-              collectionName(std::move(collectionName)), body(std::move(body)) {}
-};
+              collection(std::move(collection)), body(std::move(body)) {}
+    };
 
 struct ConcatNode : ASTNode {
     std::unique_ptr<ASTNode> left;
@@ -173,4 +175,14 @@ class ArrayLiteralNode : public ASTNode {
         ArrayLiteralNode(std::vector<std::unique_ptr<ASTNode>> elements)
             : elements(std::move(elements)) {}
 };
+
+class UnaryOpNode : public ASTNode { // NEW (assuming it wasn't present)
+    public:
+        UnaryOp op;
+        std::unique_ptr<ASTNode> operand;
+        UnaryOpNode(UnaryOp op, std::unique_ptr<ASTNode> operand)
+            : op(op), operand(std::move(operand)) {}
+};
+
+    
 #endif

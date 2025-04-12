@@ -6,6 +6,7 @@
 #include <llvm/IR/Module.h>
 #include <llvm/IR/IRBuilder.h>
 #include <unordered_map>
+#include <map>
 #include <memory>
 
 class CodeGen {
@@ -19,6 +20,7 @@ private:
     std::unique_ptr<llvm::Module> module;
     std::unique_ptr<llvm::IRBuilder<>> builder;
     llvm::Function* printfFunc; 
+    std::map<std::string, uint64_t> arraySizes;
     std::unordered_map<std::string, llvm::AllocaInst*> symbols;
     
     void generateStatement(ASTNode* node);
@@ -29,6 +31,8 @@ private:
     void generateBlock(BlockNode* blockNode);
     void generatePrint(PrintNode* node);
     void generateLoop(LoopNode* node);
+    void printArray(const std::vector<llvm::Value*>& elements);
+    void printArrayVar(llvm::Value* arrayPtr, uint64_t size);
     llvm::Value* generatePow(llvm::Value* base, llvm::Value* exp);
     llvm::Value* generateValue(ASTNode* node, llvm::Type* expectedType);
 };
