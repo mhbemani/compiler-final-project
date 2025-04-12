@@ -29,6 +29,7 @@ private:
     void generateBlock(BlockNode* blockNode);
     void generatePrint(PrintNode* node);
     void generateLoop(LoopNode* node);
+    llvm::Value* generatePow(llvm::Value* base, llvm::Value* exp);
     llvm::Value* generateValue(ASTNode* node, llvm::Type* expectedType);
 };
 

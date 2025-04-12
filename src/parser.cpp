@@ -119,10 +119,10 @@ std::unique_ptr<ASTNode> Parser::parseExpression() {
            currentToken.type == Token::NotEqual || currentToken.type == Token::Greater ||
            currentToken.type == Token::GreaterEqual || currentToken.type == Token::Less ||
            currentToken.type == Token::And || currentToken.type == Token::Or
-            // ||currentToken.type == Token::IntLiteral
+            ||currentToken.type == Token::SignedIntLiteral
         ) {
         BinaryOp op;
-        if (currentToken.type != Token::IntLiteral){
+        if (currentToken.type != Token::SignedIntLiteral){
             switch (currentToken.type) {
                 case Token::Plus: op = BinaryOp::ADD; break;
                 case Token::Minus: op = BinaryOp::SUBTRACT; break;
@@ -145,10 +145,14 @@ std::unique_ptr<ASTNode> Parser::parseExpression() {
     
             left = std::make_unique<BinaryOpNode>(op, std::move(left), std::move(right));
         }else{
-            op = BinaryOp::ADD;
             auto right = std::make_unique<IntLiteral>(std::stoi(currentToken.lexeme));
-            advance(); // consume the int literal
-            left = std::make_unique<BinaryOpNode>(op, std::move(left), std::move(right));
+            left = std::make_unique<BinaryOpNode>(BinaryOp::ADD, std::move(left), std::move(right));
+            advance(); // consume operator
+
+            // op = BinaryOp::ADD;
+            // auto right = std::make_unique<IntLiteral>(std::stoi(currentToken.lexeme));
+            // advance(); // consume the int literal
+            // left = std::make_unique<BinaryOpNode>(op, std::move(left), std::move(right));
         }
     }
 
@@ -156,7 +160,7 @@ std::unique_ptr<ASTNode> Parser::parseExpression() {
 }
 
 std::unique_ptr<ASTNode> Parser::parsePrimary() {
-    if (currentToken.type == Token::IntLiteral) {
+    if (currentToken.type == Token::IntLiteral || currentToken.type == Token::SignedIntLiteral) {
         auto node = std::make_unique<IntLiteral>(std::stoi(currentToken.lexeme));
         advance();
         return node;
@@ -203,6 +207,53 @@ std::unique_ptr<ASTNode> Parser::parsePrimary() {
         }
         advance();
         return std::make_unique<ConcatNode>(std::move(left), std::move(right));
+    } else if (currentToken.type == Token::Abs) {
+            advance(); // Consume 'abs'
+        if (currentToken.type != Token::LeftParen) {
+            throw std::runtime_error("Expected '(' after 'abs'");
+        }
+        advance(); // Consume '('
+        auto expr = parseExpression();
+        if (!expr) {
+            throw std::runtime_error("Expected expression in abs");
+        }
+        if (!dynamic_cast<IntLiteral*>(expr.get()) && !dynamic_cast<VarRefNode*>(expr.get())) {
+            throw std::runtime_error("abs argument must be an integer literal or identifier");
+        }
+        if (currentToken.type != Token::RightParen) {
+            throw std::runtime_error("Expected ')' after abs argument");
+        }
+        advance(); // Consume ')'
+        return std::make_unique<BinaryOpNode>(BinaryOp::ABS, std::move(expr), nullptr);
+    } else if (currentToken.type == Token::Pow) { // New
+        advance();
+        if (currentToken.type != Token::LeftParen) {
+            throw std::runtime_error("Expected '(' after 'pow' at line " + std::to_string(currentToken.line));
+        }
+        advance();
+        auto base = parseExpression();
+        if (!base) {
+            throw std::runtime_error("Expected base expression in pow at line " + std::to_string(currentToken.line));
+        }
+        if (!dynamic_cast<IntLiteral*>(base.get()) && !dynamic_cast<VarRefNode*>(base.get())) {
+            throw std::runtime_error("pow base must be an integer literal or identifier at line " + std::to_string(currentToken.line));
+        }
+        if (currentToken.type != Token::Comma) {
+            throw std::runtime_error("Expected ',' after pow base at line " + std::to_string(currentToken.line));
+        }
+        advance();
+        auto exp = parseExpression();
+        if (!exp) {
+            throw std::runtime_error("Expected exponent expression in pow at line " + std::to_string(currentToken.line));
+        }
+        if (!dynamic_cast<IntLiteral*>(exp.get()) && !dynamic_cast<VarRefNode*>(exp.get())) {
+            throw std::runtime_error("pow exponent must be an integer literal or identifier at line " + std::to_string(currentToken.line));
+        }
+        if (currentToken.type != Token::RightParen) {
+            throw std::runtime_error("Expected ')' after pow arguments at line " + std::to_string(currentToken.line));
+        }
+        advance();
+        return std::make_unique<BinaryOpNode>(BinaryOp::POW, std::move(base), std::move(exp));
     } else {
         throw std::runtime_error("Expected primary expression");
     }

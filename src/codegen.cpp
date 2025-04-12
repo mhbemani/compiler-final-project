@@ -365,6 +365,52 @@ void CodeGen::generateLoop(LoopNode* node) {
     }
 }
 
+llvm::Value* CodeGen::generatePow(llvm::Value* base, llvm::Value* exp) {
+    if (!base->getType()->isIntegerTy(32) || !exp->getType()->isIntegerTy(32)) {
+        throw std::runtime_error("pow arguments must be integers");
+    }
+    // Initialize result = 1
+    llvm::Value* result = llvm::ConstantInt::get(llvm::Type::getInt32Ty(*context), 1);
+
+    // Create basic blocks
+    llvm::Function* func = builder->GetInsertBlock()->getParent();
+    llvm::BasicBlock* entryBB = builder->GetInsertBlock();
+    llvm::BasicBlock* loopBB = llvm::BasicBlock::Create(*context, "pow_loop", func);
+    llvm::BasicBlock* bodyBB = llvm::BasicBlock::Create(*context, "pow_body", func);
+    llvm::BasicBlock* endBB = llvm::BasicBlock::Create(*context, "pow_end", func);
+
+    // Check if exp >= 0
+    llvm::Value* zero = llvm::ConstantInt::get(llvm::Type::getInt32Ty(*context), 0);
+    llvm::Value* isNonNeg = builder->CreateICmpSGE(exp, zero, "is_nonneg");
+    builder->CreateCondBr(isNonNeg, loopBB, endBB);
+
+    // Loop block
+    builder->SetInsertPoint(loopBB);
+    llvm::PHINode* phi_result = builder->CreatePHI(llvm::Type::getInt32Ty(*context), 2, "result");
+    llvm::PHINode* phi_exp = builder->CreatePHI(llvm::Type::getInt32Ty(*context), 2, "exp");
+    phi_result->addIncoming(result, entryBB); // From entry
+    phi_exp->addIncoming(exp, entryBB);      // From entry
+
+    // Loop condition: exp > 0
+    llvm::Value* cond = builder->CreateICmpSGT(phi_exp, zero, "exp_positive");
+    builder->CreateCondBr(cond, bodyBB, endBB);
+
+    // Body: result *= base, exp--
+    builder->SetInsertPoint(bodyBB);
+    llvm::Value* new_result = builder->CreateMul(phi_result, base, "pow_mult");
+    llvm::Value* new_exp = builder->CreateSub(phi_exp, llvm::ConstantInt::get(llvm::Type::getInt32Ty(*context), 1), "exp_decr");
+    phi_result->addIncoming(new_result, bodyBB); // Loop back
+    phi_exp->addIncoming(new_exp, bodyBB);      // Loop back
+    builder->CreateBr(loopBB);
+
+    // End block
+    builder->SetInsertPoint(endBB);
+    llvm::PHINode* final_result = builder->CreatePHI(llvm::Type::getInt32Ty(*context), 2, "final_result");
+    final_result->addIncoming(result, entryBB);   // exp < 0
+    final_result->addIncoming(phi_result, loopBB); // exp <= 0
+    return final_result;
+}
+
 llvm::Value* CodeGen::generateValue(ASTNode* node, llvm::Type* expectedType) {
     if (auto intLit = dynamic_cast<IntLiteral*>(node)) {
         if (expectedType->isIntegerTy()) {
@@ -404,7 +450,7 @@ llvm::Value* CodeGen::generateValue(ASTNode* node, llvm::Type* expectedType) {
         if (binOp->op == BinaryOp::EQUAL || binOp->op == BinaryOp::LESS_EQUAL ||
             binOp->op == BinaryOp::NOT_EQUAL || binOp->op == BinaryOp::GREATER ||
             binOp->op == BinaryOp::GREATER_EQUAL || binOp->op == BinaryOp::LESS ||
-            binOp->op == BinaryOp::AND || binOp->op == BinaryOp::OR) {
+            binOp->op == BinaryOp::AND || binOp->op == BinaryOp::OR || binOp->op == BinaryOp::POW ){
             Value* left = generateValue(binOp->left.get(), binOp->op == BinaryOp::AND || binOp->op == BinaryOp::OR ? Type::getInt1Ty(*context) : Type::getInt32Ty(*context));
             Value* right = generateValue(binOp->right.get(), binOp->op == BinaryOp::AND || binOp->op == BinaryOp::OR ? Type::getInt1Ty(*context) : Type::getInt32Ty(*context));
             switch (binOp->op) {
@@ -416,11 +462,22 @@ llvm::Value* CodeGen::generateValue(ASTNode* node, llvm::Type* expectedType) {
                 case BinaryOp::LESS: return builder->CreateICmpSLT(left, right);
                 case BinaryOp::AND: return builder->CreateAnd(left, right);
                 case BinaryOp::OR: return builder->CreateOr(left, right);
+                case BinaryOp::POW: return generatePow(left, right);
                 default: throw std::runtime_error("Unreachable");
             }
         }
         // Arithmetic operators
         Value* left = generateValue(binOp->left.get(), expectedType);
+        if (binOp->op == BinaryOp::ABS) {
+            if (!left->getType()->isIntegerTy(32)) {
+                throw std::runtime_error("abs argument must be an integer");
+            }
+            // abs: x < 0 ? -x : x
+            llvm::Value* zero = llvm::ConstantInt::get(llvm::Type::getInt32Ty(*context), 0);
+            llvm::Value* isNeg = builder->CreateICmpSLT(left, zero, "is_neg");
+            llvm::Value* negExpr = builder->CreateSub(zero, left, "neg");
+            return builder->CreateSelect(isNeg, negExpr, left, "abs");
+        }
         Value* right = generateValue(binOp->right.get(), expectedType);
         switch (binOp->op) {
             case BinaryOp::ADD:

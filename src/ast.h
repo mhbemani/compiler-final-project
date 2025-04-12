@@ -6,7 +6,7 @@
 #include <string>
 
 enum class VarType { INT, STRING, BOOL, FLOAT, CHAR, NEUTRAL };
-enum class BinaryOp { ADD, SUBTRACT, MULTIPLY, DIVIDE, EQUAL,
+enum class BinaryOp { ADD, SUBTRACT, MULTIPLY, DIVIDE, EQUAL, ABS, POW,
      NOT_EQUAL, LESS, LESS_EQUAL, GREATER, GREATER_EQUAL, AND, OR };
 enum class LoopType { For, Foreach };
 // enum class LogicalOp { EQUAL, NOT_EQUAL, LESS, LESS_EQUAL, GREATER, GREATER_EQUAL };
@@ -165,5 +165,12 @@ struct ConcatNode : ASTNode {
     std::unique_ptr<ASTNode> right;
     ConcatNode(std::unique_ptr<ASTNode> l, std::unique_ptr<ASTNode> r)
         : left(std::move(l)), right(std::move(r)) {}
+};
+
+class ArrayLiteralNode : public ASTNode {
+    public:
+        std::vector<std::unique_ptr<ASTNode>> elements;
+        ArrayLiteralNode(std::vector<std::unique_ptr<ASTNode>> elements)
+            : elements(std::move(elements)) {}
 };
 #endif

@@ -16,6 +16,9 @@ struct Token {
         Foreach,
         In,
         Concat,
+        Array,
+        Pow,
+        Abs,
         /* signs begin */ 
         Equal, 
         DoubleQuotation,
@@ -33,7 +36,8 @@ struct Token {
         RightBrace,
         LeftParen,
         RightParen,
-
+        LeftBracket,
+        RightBracket,
         EqualEqual, 
         NotEqual, 
         Less, 
@@ -52,6 +56,7 @@ struct Token {
         BoolLiteral,
         FloatLiteral,
         CharLiteral,
+        SignedIntLiteral,
         Error
     };
     

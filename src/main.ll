@@ -1,30 +1,26 @@
 ; ModuleID = 'main'
 source_filename = "main"
 
-@0 = private unnamed_addr constant [6 x i8] c"conca\00", align 1
-@1 = private unnamed_addr constant [9 x i8] c"tination\00", align 1
-@2 = private unnamed_addr constant [4 x i8] c"%d\0A\00", align 1
-@3 = private unnamed_addr constant [4 x i8] c"%s\0A\00", align 1
+@.int_fmt = private constant [3 x i8] c"%d\00"
 
 define i32 @main() {
 entry:
-  %a = alloca ptr, align 8
-  store ptr @0, ptr %a, align 8
-  %b = alloca ptr, align 8
-  store ptr @1, ptr %b, align 8
-  %0 = load ptr, ptr %a, align 8
-  %1 = load ptr, ptr %b, align 8
-  %leftLen = call i32 @strlen(ptr %0)
-  %rightLen = call i32 @strlen(ptr %1)
-  %totalLenNoNull = add i32 %leftLen, %rightLen
-  %totalLen = add i32 %totalLenNoNull, 1
-  %concatResult = call ptr @malloc(i32 %totalLen)
-  %2 = add i32 %leftLen, 1
-  %3 = call ptr @memcpy(ptr %concatResult, ptr %0, i32 %2)
-  %destOffset = getelementptr i8, ptr %concatResult, i32 %leftLen
-  %4 = add i32 %rightLen, 1
-  %5 = call ptr @memcpy(ptr %destOffset, ptr %1, i32 %4)
-  %6 = call i32 (ptr, ...) @printf(ptr @3, ptr %concatResult)
+  br i1 true, label %pow_loop, label %pow_end
+
+pow_loop:                                         ; preds = %pow_body, %entry
+  %result = phi i32 [ 1, %entry ], [ %pow_mult, %pow_body ]
+  %exp = phi i32 [ 4, %entry ], [ %exp_decr, %pow_body ]
+  %exp_positive = icmp sgt i32 %exp, 0
+  br i1 %exp_positive, label %pow_body, label %pow_end
+
+pow_body:                                         ; preds = %pow_loop
+  %pow_mult = mul i32 %result, -2
+  %exp_decr = sub i32 %exp, 1
+  br label %pow_loop
+
+pow_end:                                          ; preds = %pow_loop, %entry
+  %final_result = phi i32 [ 1, %entry ], [ %result, %pow_loop ]
+  %0 = call i32 (ptr, ...) @printf(ptr @.int_fmt, i32 %final_result)
   ret i32 0
 }
 
