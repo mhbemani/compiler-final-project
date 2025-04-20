@@ -110,7 +110,8 @@ Token Lexer::nextToken() {
         if (lexeme == "try") return {Token::Try, "", line, column};
         if (lexeme == "catch") return {Token::Catch, "", line, column};
         if (lexeme == "error") return {Token::Error, "", line, column};
-        // if (lexeme.size() == 1) return {Token::CharLiteral, lexeme, line, column};
+        if (lexeme == "match") return {Token::Match, "", line, column};
+        
 
         //          add other keywords           //
 
@@ -134,17 +135,25 @@ Token Lexer::nextToken() {
                 column++;
                 return {c == '-' ? Token::MinusEqual : Token::PlusEqual, lexeme + "=", line, column - 1};
             }
-            if (c == '-' || peek() == '-') {
+            
+            if (c == '-' && peek() == '-') {
                 pos++;
                 column++;
                 return {Token::MinusMinus, lexeme + "-", line, column - 1};
             }
-            if (c == '+' || peek() == '+') {
+            
+            if (c == '+' && peek() == '+') {
                 pos++;
                 column++;
                 return {Token::PlusPlus, lexeme + "+", line, column - 1};
             }
-            // If no digit follows, it’s an operator
+
+            if (c == '-' && peek() == '>') {
+                pos++;
+                column++;
+                return {Token::Arrow, lexeme + "+", line, column - 1};
+            }
+            
             if (pos >= source.size() || !std::isdigit(source[pos])) {
                 return {c == '-' ? Token::Minus : Token::Plus, lexeme, line, column - 1};
             }
@@ -302,6 +311,12 @@ Token Lexer::nextToken() {
         pos++;
         column++;
         return {Token::Colon, "", line, column};
+    }
+
+    if (c == '_') {
+        pos++;
+        column++;
+        return {Token::Underscore, "", line, column};
     }
 
     if (c == '?') {

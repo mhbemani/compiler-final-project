@@ -99,6 +99,9 @@ std::unique_ptr<ASTNode> Parser::parseStatement() {
                                              std::move(catchBlock), 
                                              errorVar);
     }
+    if (currentToken.type == Token::Match) {
+        return parseMatch(); // No ';' required after match
+    }
     
 
     //  std::cout << (currentToken.type == Token::Semicolon) << std::endl;
@@ -829,4 +832,56 @@ std::unique_ptr<ASTNode> Parser::parseTernary(std::unique_ptr<ASTNode> condition
     return condition;
 }
 
-//std::unique_ptr<ASTNode> Parser::parseSwithCase()
+std::unique_ptr<ASTNode> Parser::parseMatch() {
+    advance(); // Consume 'match'
+    auto expr = parseExpression(); // Parse match expression (e.g., x)
+    if (currentToken.type != Token::LeftBrace) {
+        throw std::runtime_error("Expected '{' after match expression at line " + std::to_string(currentToken.line));
+    }
+    advance(); // Consume '{'
+
+    std::vector<std::unique_ptr<MatchCaseNode>> cases;
+    bool hasDefault = false;
+
+    while (currentToken.type != Token::RightBrace && currentToken.type != Token::Eof) {
+        std::unique_ptr<ASTNode> value;
+        if (currentToken.type == Token::Underscore) {
+            if (hasDefault) {
+                throw std::runtime_error("Multiple default cases in match at line " + std::to_string(currentToken.line));
+            }
+            hasDefault = true;
+            value = nullptr; // Default case has no value
+            advance(); // Consume '_'
+        } else {
+            value = parseExpression(); // Parse case value (e.g., 0, 1)
+        }
+
+        if (currentToken.type != Token::Arrow) {
+            throw std::runtime_error("Expected '->' in match case at line " + std::to_string(currentToken.line));
+        }
+        advance(); // Consume '->'
+
+        std::unique_ptr<ASTNode> body;
+        if (currentToken.type == Token::LeftBrace) {
+            // Parse block for multiple statements
+            body = parseBlock();
+        } else {
+            // Parse single statement (e.g., print("zero"))
+            body = parseStatement();
+        }
+
+        cases.push_back(std::make_unique<MatchCaseNode>(std::move(value), std::move(body)));
+
+        // Handle optional comma, but only if not at the end of the match
+        if (currentToken.type == Token::Comma && peekToken.type != Token::RightBrace) {
+            advance(); // Consume ','
+        }
+    }
+
+    if (currentToken.type != Token::RightBrace) {
+        throw std::runtime_error("Expected '}' to close match at line " + std::to_string(currentToken.line));
+    }
+    advance(); // Consume '}'
+
+    return std::make_unique<MatchNode>(std::move(expr), std::move(cases));
+}

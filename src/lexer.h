@@ -60,6 +60,9 @@ struct Token {
         Or,
         PlusPlus,
         MinusMinus,
+        Match,
+        Arrow,
+        Underscore,
 
         If, 
         Else, 

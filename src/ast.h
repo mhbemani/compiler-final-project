@@ -204,4 +204,19 @@ struct TernaryExprNode : ASTNode {
         : condition(std::move(cond)), trueBranch(std::move(trueB)), falseBranch(std::move(falseB)) {}
 };
 
+// Match case node (e.g., 0 -> stmt or _ -> stmt)
+struct MatchCaseNode : ASTNode {
+    std::unique_ptr<ASTNode> value; // Case value (e.g., 0, 1, or nullptr for _)
+    std::unique_ptr<ASTNode> body;  // Body (StatementNode or BlockNode)
+    MatchCaseNode(std::unique_ptr<ASTNode> val, std::unique_ptr<ASTNode> b)
+        : value(std::move(val)), body(std::move(b)) {}
+};
+
+// Match statement node (e.g., match x { 0 -> stmt, _ -> stmt })
+struct MatchNode : ASTNode {
+    std::unique_ptr<ASTNode> expression; // Match expression (e.g., x)
+    std::vector<std::unique_ptr<MatchCaseNode>> cases; // List of cases
+    MatchNode(std::unique_ptr<ASTNode> expr, std::vector<std::unique_ptr<MatchCaseNode>> c)
+        : expression(std::move(expr)), cases(std::move(c)) {}
+};
 #endif

@@ -35,6 +35,7 @@ private:
     void printArrayVar(llvm::Value* arrayPtr, uint64_t size);
     llvm::Value* generatePow(llvm::Value* base, llvm::Value* exp);
     void generateTryCatch(TryCatchNode* node);
+    void generateMatch(MatchNode* node);
     llvm::Value* generateValue(ASTNode* node, llvm::Type* expectedType);
 };
 

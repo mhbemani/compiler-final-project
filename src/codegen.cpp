@@ -18,7 +18,7 @@ CodeGen::CodeGen() :
                                                 {PointerType::get(Type::getInt8Ty(*context), 0)}, true);
     printfFunc = Function::Create(printfType, Function::ExternalLinkage, "printf", module.get());
 
-    // Declare string functions for concat
+    // Declare string functions for concat and strcmp
     Type* int8PtrTy = PointerType::get(Type::getInt8Ty(*context), 0);
     Type* int32Ty = Type::getInt32Ty(*context);
     // strlen: i32 (i8*)
@@ -30,8 +30,9 @@ CodeGen::CodeGen() :
     // memcpy: i8* (i8*, i8*, i32)
     FunctionType* memcpyType = FunctionType::get(int8PtrTy, {int8PtrTy, int8PtrTy, int32Ty}, false);
     Function::Create(memcpyType, Function::ExternalLinkage, "memcpy", module.get());
-
-        
+    // strcmp: i32 (i8*, i8*)
+    FunctionType* strcmpType = FunctionType::get(int32Ty, {int8PtrTy, int8PtrTy}, false);
+    Function::Create(strcmpType, Function::ExternalLinkage, "strcmp", module.get());
 
     // Create entry block
     BasicBlock* entry = BasicBlock::Create(*context, "entry", mainFunc);
@@ -82,6 +83,8 @@ void CodeGen::generateStatement(ASTNode* node) {
         generateTryCatch(tryCatch);
     } else if (auto unaryOp = dynamic_cast<UnaryOpNode*>(node)) {
         generateValue(unaryOp, nullptr); // Handle x++, x--, arr[i]++, arr[i]--
+    } else if (auto match = dynamic_cast<MatchNode*>(node)) {
+        generateMatch(match);
     } else {
         throw std::runtime_error("Unknown statement type");
     }
@@ -633,6 +636,76 @@ void CodeGen::generateTryCatch(TryCatchNode* node) {
     }
 
     builder->SetInsertPoint(afterBlock);
+}
+
+void CodeGen::generateMatch(MatchNode* node) {
+    Function* parentFunc = builder->GetInsertBlock()->getParent();
+    BasicBlock* afterMatch = BasicBlock::Create(*context, "after_match", parentFunc);
+
+    // Evaluate the match expression
+    Value* exprValue = generateValue(node->expression.get(), nullptr);
+    Type* exprType = exprValue->getType();
+    Type* stringType = PointerType::get(Type::getInt8Ty(*context), 0);
+    if (exprType != Type::getInt32Ty(*context) && exprType != stringType) {
+        throw std::runtime_error("Match expression must evaluate to an integer or string");
+    }
+    bool isString = exprType == stringType;
+
+    // Create basic blocks for each case and track the next condition block
+    std::vector<BasicBlock*> caseBlocks;
+    BasicBlock* defaultBlock = nullptr;
+    BasicBlock* currentCondBlock = builder->GetInsertBlock();
+
+    for (size_t i = 0; i < node->cases.size(); ++i) {
+        BasicBlock* caseBlock = BasicBlock::Create(*context, "case_" + std::to_string(i), parentFunc);
+        caseBlocks.push_back(caseBlock);
+        if (!node->cases[i]->value) { // Default case (_)
+            defaultBlock = caseBlock;
+        }
+    }
+
+    // Generate condition checks and branches
+    for (size_t i = 0; i < node->cases.size(); ++i) {
+        auto& caseNode = node->cases[i];
+        if (caseNode->value) { // Non-default case
+            builder->SetInsertPoint(currentCondBlock);
+            Value* caseValue = generateValue(caseNode->value.get(), isString ? stringType : Type::getInt32Ty(*context));
+            if (caseValue->getType() != exprType) {
+                throw std::runtime_error("Case value type does not match match expression type");
+            }
+            Value* cmp;
+            if (isString) {
+                Value* strcmpResult = builder->CreateCall(module->getFunction("strcmp"), {exprValue, caseValue}, "strcmp_result");
+                cmp = builder->CreateICmpEQ(strcmpResult, ConstantInt::get(Type::getInt32Ty(*context), 0), "case_cmp");
+            } else {
+                cmp = builder->CreateICmpEQ(exprValue, caseValue, "case_cmp");
+            }
+            BasicBlock* nextCondBlock;
+            if (i + 1 < node->cases.size() && node->cases[i + 1]->value) {
+                nextCondBlock = BasicBlock::Create(*context, "case_cond_" + std::to_string(i + 1), parentFunc);
+            } else {
+                nextCondBlock = defaultBlock ? defaultBlock : afterMatch;
+            }
+            builder->CreateCondBr(cmp, caseBlocks[i], nextCondBlock);
+            currentCondBlock = nextCondBlock;
+        }
+    }
+
+    // Generate case bodies
+    for (size_t i = 0; i < node->cases.size(); ++i) {
+        builder->SetInsertPoint(caseBlocks[i]);
+        if (auto* block = dynamic_cast<BlockNode*>(node->cases[i]->body.get())) {
+            generateBlock(block);
+        } else {
+            generateStatement(node->cases[i]->body.get());
+        }
+        if (!builder->GetInsertBlock()->getTerminator()) {
+            builder->CreateBr(afterMatch);
+        }
+    }
+
+    // Set insertion point to afterMatch
+    builder->SetInsertPoint(afterMatch);
 }
 
 llvm::Value* CodeGen::generateValue(ASTNode* node, llvm::Type* expectedType) {
