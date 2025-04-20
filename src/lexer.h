@@ -57,6 +57,8 @@ struct Token {
         GreaterEqual,
         And,
         Or,
+        PlusPlus,
+        MinusMinus,
 
         If, 
         Else, 

@@ -209,6 +209,19 @@ std::unique_ptr<ASTNode> Parser::parseExpression() {
             // left = std::make_unique<BinaryOpNode>(op, std::move(left), std::move(right));
         }
     }
+    if (currentToken.type == Token::PlusPlus || currentToken.type == Token::MinusMinus) {
+        UnaryOp op = (currentToken.type == Token::PlusPlus) ? UnaryOp::INCREMENT : UnaryOp::DECREMENT;
+        advance(); // Consume '++' or '--'
+        if (!dynamic_cast<VarRefNode*>(left.get()) && !dynamic_cast<BinaryOpNode*>(left.get())) {
+            throw std::runtime_error("Increment/decrement can only be applied to variables or array elements");
+        }
+        if (auto* binOp = dynamic_cast<BinaryOpNode*>(left.get())) {
+            if (binOp->op != BinaryOp::INDEX) {
+                throw std::runtime_error("Increment/decrement can only be applied to array elements with index");
+            }
+        }
+        left = std::make_unique<UnaryOpNode>(op, std::move(left));
+    }
 
     return left;
 }
@@ -592,9 +605,34 @@ std::unique_ptr<ASTNode> Parser::parseAssignment() {
     auto tempType = currentToken.type;
     advance(); // Consume ident
     
+    // Handle array indexing: arr[i]
+    std::unique_ptr<ASTNode> left = std::make_unique<VarRefNode>(name);
+    if (currentToken.type == Token::LeftBracket) {
+        advance(); // Consume '['
+        auto index = parseExpression();
+        if (!index) {
+            throw std::runtime_error("Expected index expression in array access at line " + std::to_string(currentToken.line));
+        }
+        if (!dynamic_cast<IntLiteral*>(index.get()) && !dynamic_cast<VarRefNode*>(index.get())) {
+            throw std::runtime_error("Array index must be an integer or identifier at line " + std::to_string(currentToken.line));
+        }
+        if (currentToken.type != Token::RightBracket) {
+            throw std::runtime_error("Expected ']' after array index at line " + std::to_string(currentToken.line));
+        }
+        advance(); // Consume ']'
+        left = std::make_unique<BinaryOpNode>(BinaryOp::INDEX, std::move(left), std::move(index));
+    }
+
+    // Handle ++ or --
+    if (currentToken.type == Token::PlusPlus || currentToken.type == Token::MinusMinus) {
+        UnaryOp op = (currentToken.type == Token::PlusPlus) ? UnaryOp::INCREMENT : UnaryOp::DECREMENT;
+        advance(); // Consume '++' or '--'
+        return std::make_unique<UnaryOpNode>(op, std::move(left));
+    }
+
     BinaryOp compoundOp;
     bool isCompound = false;
-
+    
     // Handle =, +=, -=, *=, /=
     if (currentToken.type == Token::Equal) {
         advance();

@@ -134,6 +134,16 @@ Token Lexer::nextToken() {
                 column++;
                 return {c == '-' ? Token::MinusEqual : Token::PlusEqual, lexeme + "=", line, column - 1};
             }
+            if (c == '-' || peek() == '-') {
+                pos++;
+                column++;
+                return {Token::MinusMinus, lexeme + "-", line, column - 1};
+            }
+            if (c == '+' || peek() == '+') {
+                pos++;
+                column++;
+                return {Token::PlusPlus, lexeme + "+", line, column - 1};
+            }
             // If no digit follows, it’s an operator
             if (pos >= source.size() || !std::isdigit(source[pos])) {
                 return {c == '-' ? Token::Minus : Token::Plus, lexeme, line, column - 1};

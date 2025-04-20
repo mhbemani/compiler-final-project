@@ -80,7 +80,9 @@ void CodeGen::generateStatement(ASTNode* node) {
         generateValue(concat, nullptr);
     } else if (auto tryCatch = dynamic_cast<TryCatchNode*>(node)) { // NEW: Handle TryCatchNode
         generateTryCatch(tryCatch);
-    }else {
+    } else if (auto unaryOp = dynamic_cast<UnaryOpNode*>(node)) {
+        generateValue(unaryOp, nullptr); // Handle x++, x--, arr[i]++, arr[i]--
+    } else {
         throw std::runtime_error("Unknown statement type");
     }
 }
@@ -840,6 +842,33 @@ llvm::Value* CodeGen::generateValue(ASTNode* node, llvm::Type* expectedType) {
         }
         return builder->CreateLoad(alloca->getAllocatedType(), alloca);
     } else if (auto unaryOp = dynamic_cast<UnaryOpNode*>(node)) {
+        if (unaryOp->op == UnaryOp::INCREMENT || unaryOp->op == UnaryOp::DECREMENT) {
+            Value* ptr = nullptr;
+            if (auto* varRef = dynamic_cast<VarRefNode*>(unaryOp->operand.get())) {
+                auto it = symbols.find(varRef->name);
+                if (it == symbols.end()) {
+                    throw std::runtime_error("Undeclared variable: " + varRef->name);
+                }
+                ptr = it->second;
+            } else if (auto* binOp = dynamic_cast<BinaryOpNode*>(unaryOp->operand.get())) {
+                if (binOp->op != BinaryOp::INDEX) {
+                    throw std::runtime_error("Increment/decrement only supported on variables or array elements");
+                }
+                Value* arrayPtr = generateValue(binOp->left.get(), PointerType::get(Type::getInt32Ty(*context), 0));
+                Value* index = generateValue(binOp->right.get(), Type::getInt32Ty(*context));
+                ptr = builder->CreateGEP(Type::getInt32Ty(*context), arrayPtr, index);
+            } else {
+                throw std::runtime_error("Increment/decrement only supported on variables or array elements");
+            }
+            Type* type = Type::getInt32Ty(*context);
+            Value* current = builder->CreateLoad(type, ptr);
+            Value* one = ConstantInt::get(type, 1);
+            Value* newVal = (unaryOp->op == UnaryOp::INCREMENT)
+                ? builder->CreateAdd(current, one)
+                : builder->CreateSub(current, one);
+            builder->CreateStore(newVal, ptr);
+            return current; // Return original value (postfix)
+        }
         Value* operand = generateValue(unaryOp->operand.get(), PointerType::get(Type::getInt32Ty(*context), 0));
         uint64_t size = 5;
         if (auto* varRef = dynamic_cast<VarRefNode*>(unaryOp->operand.get())) {
