@@ -238,6 +238,22 @@ std::unique_ptr<ASTNode> Parser::parsePrimary() {
         std::string name = currentToken.lexeme;
         advance();
         auto varRef = std::make_unique<VarRefNode>(name);
+        // Support arr[i] syntax
+        if (currentToken.type == Token::LeftBracket) {
+            advance(); // Consume '['
+            auto index = parseExpression(); // Parse index expression (e.g., i or 5)
+            if (!index) {
+                throw std::runtime_error("Expected index expression in array access at line " + std::to_string(currentToken.line));
+            }
+            if (!dynamic_cast<IntLiteral*>(index.get()) && !dynamic_cast<VarRefNode*>(index.get())) {
+                throw std::runtime_error("Array index must be an integer or identifier at line " + std::to_string(currentToken.line));
+            }
+            if (currentToken.type != Token::RightBracket) {
+                throw std::runtime_error("Expected ']' after array index at line " + std::to_string(currentToken.line));
+            }
+            advance(); // Consume ']'
+            return std::make_unique<BinaryOpNode>(BinaryOp::INDEX, std::move(varRef), std::move(index));
+        }
         // NEW: Support for method calls (e.g., e.toString()) using BinaryOpNode
         if (currentToken.type == Token::Dot) {
             advance(); // Consume '.'
