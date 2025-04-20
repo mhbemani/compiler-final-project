@@ -298,6 +298,17 @@ Token Lexer::nextToken() {
         return {Token::StrLiteral, value, line, column};
     }
     
+    if (c == ':') {
+        pos++;
+        column++;
+        return {Token::Colon, "", line, column};
+    }
+
+    if (c == '?') {
+        pos++;
+        column++;
+        return {Token::Question, "", line, column};
+    }
     // std::cout << "reached here ...\n";
     if (c == '+') {
         pos++; column++;

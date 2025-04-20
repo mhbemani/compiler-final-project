@@ -43,6 +43,7 @@ struct Token {
         MinusEqual, 
         StarEqual,
         Colon,
+        Question,
         LeftBrace,
         RightBrace,
         LeftParen,

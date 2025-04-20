@@ -636,7 +636,31 @@ void CodeGen::generateTryCatch(TryCatchNode* node) {
 }
 
 llvm::Value* CodeGen::generateValue(ASTNode* node, llvm::Type* expectedType) {
-    if (auto concat = dynamic_cast<ConcatNode*>(node)) {
+    if (auto ternaryExpr = dynamic_cast<TernaryExprNode*>(node)) {
+        // Generate code for the condition (e.g., z > 5)
+        llvm::Value* condValue = generateValue(ternaryExpr->condition.get(), Type::getInt1Ty(*context));
+        if (!condValue->getType()->isIntegerTy(1)) {
+            throw std::runtime_error("Ternary condition must evaluate to a boolean");
+        }
+
+        // Generate code for true and false branches
+        llvm::Value* trueValue = generateValue(ternaryExpr->trueBranch.get(), expectedType);
+        llvm::Value* falseValue = generateValue(ternaryExpr->falseBranch.get(), expectedType);
+
+        // Ensure true and false branches have the same type
+        if (trueValue->getType() != falseValue->getType()) {
+            throw std::runtime_error("Ternary branches must have the same type");
+        }
+
+        // If expectedType is provided and doesn't match, throw an error
+        if (expectedType && trueValue->getType() != expectedType) {
+            throw std::runtime_error("Ternary expression type does not match expected type");
+        }
+
+        // Create select instruction
+        return builder->CreateSelect(condValue, trueValue, falseValue, "ternary_result");
+    }
+    else if (auto concat = dynamic_cast<ConcatNode*>(node)) {
         if (!expectedType || !expectedType->isPointerTy()) {
             throw std::runtime_error("Expected pointer type for string concatenation");
         }
@@ -682,7 +706,7 @@ llvm::Value* CodeGen::generateValue(ASTNode* node, llvm::Type* expectedType) {
         result->addIncoming(concatResult, concatBlock);
         return result;
     }
-    if (auto intLit = dynamic_cast<IntLiteral*>(node)) {
+    else if (auto intLit = dynamic_cast<IntLiteral*>(node)) {
         if (expectedType && expectedType->isIntegerTy()) {
             return ConstantInt::get(Type::getInt32Ty(*context), intLit->value);
         } else if (expectedType && expectedType->isFloatTy()) {

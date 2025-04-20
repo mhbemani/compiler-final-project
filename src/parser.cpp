@@ -147,7 +147,7 @@ std::unique_ptr<ASTNode> Parser::parseVarDecl() {
 
 std::unique_ptr<ASTNode> Parser::parseExpression() {
     auto left = parsePrimary();
-
+    // if(currentToken.type == Token::Question) return parseTernary();
     while (currentToken.type == Token::Plus || currentToken.type == Token::Minus ||
            currentToken.type == Token::Star || currentToken.type == Token::Slash || 
            currentToken.type == Token::EqualEqual || currentToken.type == Token::LessEqual ||
@@ -223,7 +223,7 @@ std::unique_ptr<ASTNode> Parser::parseExpression() {
         left = std::make_unique<UnaryOpNode>(op, std::move(left));
     }
 
-    return left;
+    return parseTernary(std::move(left));
 }
 
 std::unique_ptr<ASTNode> Parser::parsePrimary() {
@@ -800,6 +800,33 @@ std::unique_ptr<ASTNode> Parser::parseTryCatch() {
     );
     return std::make_unique<TryCatchNode>(std::move(tryBlock), std::move(catchBlock), errorVar);
 }
-//std::unique_ptr<ASTNode> Parser::parseOneLineIf()
+
+std::unique_ptr<ASTNode> Parser::parseTernary(std::unique_ptr<ASTNode> condition) {
+    if (currentToken.type == Token::Question) {
+        advance(); // Consume '?'
+        auto trueBranch = parseExpression(); // Parse true branch (e.g., y)
+        if (currentToken.type != Token::Colon) {
+            throw std::runtime_error("Expected ':' in ternary expression at line " + std::to_string(currentToken.line));
+        }
+        advance(); // Consume ':'
+        auto falseBranch = parseExpression(); // Parse false branch (e.g., w)
+        // Inline boolean operator check
+        auto* binOp = dynamic_cast<BinaryOpNode*>(condition.get());
+        if (!binOp || !(
+            binOp->op == BinaryOp::EQUAL ||
+            binOp->op == BinaryOp::NOT_EQUAL ||
+            binOp->op == BinaryOp::LESS ||
+            binOp->op == BinaryOp::LESS_EQUAL ||
+            binOp->op == BinaryOp::GREATER ||
+            binOp->op == BinaryOp::GREATER_EQUAL ||
+            binOp->op == BinaryOp::AND ||
+            binOp->op == BinaryOp::OR
+        )) {
+            throw std::runtime_error("Ternary condition must be a boolean expression at line " + std::to_string(currentToken.line));
+        }
+        return std::make_unique<TernaryExprNode>(std::move(condition), std::move(trueBranch), std::move(falseBranch));
+    }
+    return condition;
+}
 
 //std::unique_ptr<ASTNode> Parser::parseSwithCase()

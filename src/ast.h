@@ -196,6 +196,12 @@ class TryCatchNode : public ASTNode {
               errorVar(std::move(errorVar)) {}
     };
 
-
+struct TernaryExprNode : ASTNode {
+    std::unique_ptr<ASTNode> condition;    // e.g., z > 5
+    std::unique_ptr<ASTNode> trueBranch;   // e.g., y
+    std::unique_ptr<ASTNode> falseBranch;  // e.g., w
+    TernaryExprNode(std::unique_ptr<ASTNode> cond, std::unique_ptr<ASTNode> trueB, std::unique_ptr<ASTNode> falseB)
+        : condition(std::move(cond)), trueBranch(std::move(trueB)), falseBranch(std::move(falseB)) {}
+};
 
 #endif
