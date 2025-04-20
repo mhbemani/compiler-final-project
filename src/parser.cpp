@@ -64,7 +64,41 @@ std::unique_ptr<ASTNode> Parser::parseStatement() {
     if (currentToken.type == Token::For || currentToken.type == Token::Foreach) {
         return parseLoop();
     }
-    
+    if (currentToken.type == Token::Try) {
+        advance(); // Consume 'try'
+        if (currentToken.type != Token::LeftBrace) {
+            throw std::runtime_error("Expected '{' after 'try'");
+        }
+        auto tryBlock = parseBlock();
+        if (currentToken.type != Token::Catch) {
+            throw std::runtime_error("Expected 'catch' after try block");
+        }
+        advance(); // Consume 'catch'
+        if (currentToken.type != Token::LeftParen) {
+            throw std::runtime_error("Expected '(' after 'catch'");
+        }
+        advance(); // Consume '('
+        if (currentToken.type != Token::Error) {
+            throw std::runtime_error("Expected 'Error' in catch");
+        }
+        advance(); // Consume 'Error'
+        if (currentToken.type != Token::Ident) {
+            throw std::runtime_error("Expected identifier after 'Error'");
+        }
+        std::string errorVar = currentToken.lexeme;
+        advance(); // Consume ident (e)
+        if (currentToken.type != Token::RightParen) {
+            throw std::runtime_error("Expected ')' after catch variable");
+        }
+        advance(); // Consume ')'
+        if (currentToken.type != Token::LeftBrace) {
+            throw std::runtime_error("Expected '{' after 'catch'");
+        }
+        auto catchBlock = parseBlock();
+        return std::make_unique<TryCatchNode>(std::move(tryBlock), 
+                                             std::move(catchBlock), 
+                                             errorVar);
+    }
     
 
     //  std::cout << (currentToken.type == Token::Semicolon) << std::endl;
@@ -122,6 +156,18 @@ std::unique_ptr<ASTNode> Parser::parseExpression() {
            currentToken.type == Token::And || currentToken.type == Token::Or ||
            currentToken.type == Token::SignedIntLiteral ) {
         BinaryOp op;
+        if (currentToken.type == Token::Plus) {
+            advance(); // Consume '+'
+            auto right = parsePrimary();
+            // Handle string concatenation
+            if (dynamic_cast<StrLiteral*>(left.get()) || dynamic_cast<StrLiteral*>(right.get()) ||
+                dynamic_cast<VarRefNode*>(left.get()) || dynamic_cast<VarRefNode*>(right.get())) {    //   needs to be corrected
+                left = std::make_unique<ConcatNode>(std::move(left), std::move(right));
+            } else {
+                op = BinaryOp::ADD;
+                left = std::make_unique<BinaryOpNode>(op, std::move(left), std::move(right));
+            }
+        } else
         if (currentToken.type != Token::SignedIntLiteral){
             switch (currentToken.type) {
                 case Token::Plus: op = BinaryOp::ADD; break;
@@ -139,10 +185,18 @@ std::unique_ptr<ASTNode> Parser::parseExpression() {
                 // case Token::IntLiteral: BinaryOp::ADD; break;
                 default: throw std::runtime_error("Unknown binary operator");
             }
-    
             advance(); // consume operator
             auto right = parsePrimary();
-    
+
+            if(op == BinaryOp::ADD && currentToken.type == Token::StrLiteral){
+                if (dynamic_cast<StrLiteral*>(left.get()) || dynamic_cast<StrLiteral*>(right.get()) ||
+                dynamic_cast<VarRefNode*>(left.get()) || dynamic_cast<VarRefNode*>(right.get())) {    //   needs to be corrected
+                left = std::make_unique<ConcatNode>(std::move(left), std::move(right));
+                } else {
+                    // error : NOT-string + string -- semantics
+                }
+            }else 
+            
             left = std::make_unique<BinaryOpNode>(op, std::move(left), std::move(right));
         }else{
             auto right = std::make_unique<IntLiteral>(std::stoi(currentToken.lexeme));
@@ -181,9 +235,30 @@ std::unique_ptr<ASTNode> Parser::parsePrimary() {
         advance();
         return node;
     } else if (currentToken.type == Token::Ident) {
-        auto node = std::make_unique<VarRefNode>(currentToken.lexeme); // You need a VariableRefNode in your AST
+        std::string name = currentToken.lexeme;
         advance();
-        return node;
+        auto varRef = std::make_unique<VarRefNode>(name);
+        // NEW: Support for method calls (e.g., e.toString()) using BinaryOpNode
+        if (currentToken.type == Token::Dot) {
+            advance(); // Consume '.'
+            if (currentToken.type != Token::Ident) {
+                throw std::runtime_error("Expected method name after '.'");
+            }
+            std::string methodName = currentToken.lexeme; // e.g., "toString"
+            advance();
+            if (currentToken.type != Token::LeftParen) {
+                throw std::runtime_error("Expected '(' after method name");
+            }
+            advance(); // Consume '('
+            if (currentToken.type != Token::RightParen) {
+                throw std::runtime_error("Expected ')' after method call");
+            }
+            advance(); // Consume ')'
+            auto methodNode = std::make_unique<StrLiteral>(methodName);
+            return std::make_unique<BinaryOpNode>(BinaryOp::METHOD_CALL, std::move(varRef), std::move(methodNode));
+        }
+        // END NEW
+        return varRef;
     } else if (currentToken.type == Token::LeftBracket) { // NEW: Array literal
         advance(); // Consume '['
         std::vector<std::unique_ptr<ASTNode>> elements;
@@ -384,7 +459,7 @@ std::unique_ptr<ASTNode> Parser::parsePrimary() {
         throw std::runtime_error("Expected primary expression");
     }
 }
-/* the one below is equal to the one above, the definition will be checked in sema.cpp */
+
 //std::unique_ptr<ASTNode> Parser::parseVarDecWithoutAssignment() 
 std::unique_ptr<ASTNode> Parser::parseVarDeclMultiVariable(VarType type, std::string name) {
     int counter = 1; // might not be neccesary
@@ -633,34 +708,44 @@ std::unique_ptr<ASTNode> Parser::parseLoop() {
     }
 }
 
-//std::unique_ptr<ASTNode> Parser::parseUnaryOperator()  x++
-    // String::functions
-//std::unique_ptr<ASTNode> Parser::parseConcat()
-    // math::functions
-//std::unique_ptr<ASTNode> Parser::parsePow()
-
-//std::unique_ptr<ASTNode> Parser::parseabs()
-    //array::functions
-//std::unique_ptr<ASTNode> Parser::parseLength()
-
-//std::unique_ptr<ASTNode> Parser::parseMin()
-
-//std::unique_ptr<ASTNode> Parser::parseMax()
-
-//std::unique_ptr<ASTNode> Parser::parseIndex()
-
-//std::unique_ptr<ASTNode> Parser::parseMultiply()
-
-//std::unique_ptr<ASTNode> Parser::parseAdd()
-
-//std::unique_ptr<ASTNode> Parser::parseSubtract()
-
-//std::unique_ptr<ASTNode> Parser::parseDivide()
-
-//std::unique_ptr<ASTNode> Parser::parseArrayCalculations() // adding s m d aNumber with all the elements of an array
-
-//std::unique_ptr<ASTNode> Parser::parseTryCatch()
-
+std::unique_ptr<ASTNode> Parser::parseTryCatch() {
+    advance(); // Consume 'try'
+    if (currentToken.type != Token::LeftBrace) {
+        throw std::runtime_error("Expected '{' after 'try'");
+    }
+    auto tryBlock = parseBlock();
+    if (currentToken.type != Token::Catch) {
+        throw std::runtime_error("Expected 'catch' after try block");
+    }
+    advance(); // Consume 'catch'
+    if (currentToken.type != Token::LeftParen) {
+        throw std::runtime_error("Expected '(' after 'catch'");
+    }
+    advance(); // Consume '('
+    if (currentToken.type != Token::Error) {
+        throw std::runtime_error("Expected 'Error' in catch");
+    }
+    advance(); // Consume 'Error'
+    if (currentToken.type != Token::Ident) {
+        throw std::runtime_error("Expected identifier after 'Error'");
+    }
+    std::string errorVar = currentToken.lexeme; // e.g., "e"
+    advance(); // Consume identifier 'e'
+    if (currentToken.type != Token::RightParen) {
+        throw std::runtime_error("Expected ')' after catch variable");
+    }
+    advance(); // Consume ')'
+    if (currentToken.type != Token::LeftBrace) {
+        throw std::runtime_error("Expected '{' after catch variable");
+    }
+    auto catchBlock = parseBlock();
+    // Insert VarDeclNode for e
+    catchBlock->statements.insert(
+        catchBlock->statements.begin(),
+        std::make_unique<VarDeclNode>(VarType::ERROR, errorVar, nullptr)
+    );
+    return std::make_unique<TryCatchNode>(std::move(tryBlock), std::move(catchBlock), errorVar);
+}
 //std::unique_ptr<ASTNode> Parser::parseOneLineIf()
 
 //std::unique_ptr<ASTNode> Parser::parseSwithCase()

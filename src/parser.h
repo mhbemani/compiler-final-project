@@ -24,6 +24,7 @@ private:
     std::unique_ptr<ASTNode> parsePrimary();
     std::unique_ptr<ASTNode> parseIfStatement();
     // std::unique_ptr<ASTNode> parseLogicalExpression();
+    std::unique_ptr<ASTNode> parseTryCatch();
     std::unique_ptr<BlockNode> parseBlock();
     std::unique_ptr<ASTNode> parseLoop();
     ///////////////////////////////

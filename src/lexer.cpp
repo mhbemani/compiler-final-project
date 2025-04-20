@@ -107,6 +107,9 @@ Token Lexer::nextToken() {
         if (lexeme == "add") return {Token::Add, lexeme, line, column - int(lexeme.size())};
         if (lexeme == "subtract") return {Token::Subtract, lexeme, line, column - int(lexeme.size())};
         if (lexeme == "divide") return {Token::Divide, lexeme, line, column - int(lexeme.size())};
+        if (lexeme == "try") return {Token::Try, "", line, column};
+        if (lexeme == "catch") return {Token::Catch, "", line, column};
+        if (lexeme == "error") return {Token::Error, "", line, column};
         // if (lexeme.size() == 1) return {Token::CharLiteral, lexeme, line, column};
 
         //          add other keywords           //
@@ -225,6 +228,12 @@ Token Lexer::nextToken() {
         pos++;
         column++;
         return {Token::Comma, "", line, column};
+    }
+
+    if (c == '.') {
+        pos++;
+        column++;
+        return {Token::Dot, "", line, column};
     }
 
     if (c == '(') {

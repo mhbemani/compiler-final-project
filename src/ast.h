@@ -5,10 +5,10 @@
 #include <vector>
 #include <string>
 
-enum class VarType { INT, STRING, BOOL, FLOAT, CHAR, NEUTRAL, ARRAY };
+enum class VarType { INT, STRING, BOOL, FLOAT, CHAR, NEUTRAL, ARRAY, ERROR };
 enum class BinaryOp { ADD, SUBTRACT, MULTIPLY, DIVIDE, EQUAL, ABS, POW,
      NOT_EQUAL, LESS, LESS_EQUAL, GREATER, GREATER_EQUAL, AND, OR , 
-     INDEX, MULTIPLY_ARRAY, ADD_ARRAY, SUBTRACT_ARRAY, DIVIDE_ARRAY };
+     INDEX, MULTIPLY_ARRAY, ADD_ARRAY, SUBTRACT_ARRAY, DIVIDE_ARRAY, CONCAT, METHOD_CALL };
 enum class LoopType { For, Foreach };
 enum class UnaryOp { LENGTH, MIN, MAX };
 // enum class LogicalOp { EQUAL, NOT_EQUAL, LESS, LESS_EQUAL, GREATER, GREATER_EQUAL };
@@ -184,5 +184,18 @@ class UnaryOpNode : public ASTNode { // NEW (assuming it wasn't present)
             : op(op), operand(std::move(operand)) {}
 };
 
-    
+class TryCatchNode : public ASTNode {
+    public:
+        std::unique_ptr<BlockNode> tryBlock;
+        std::unique_ptr<BlockNode> catchBlock;
+        std::string errorVar; // e in catch (Error e)
+        TryCatchNode(std::unique_ptr<BlockNode> tryBlock, 
+                     std::unique_ptr<BlockNode> catchBlock,
+                     std::string errorVar)
+            : tryBlock(std::move(tryBlock)), catchBlock(std::move(catchBlock)), 
+              errorVar(std::move(errorVar)) {}
+    };
+
+
+
 #endif

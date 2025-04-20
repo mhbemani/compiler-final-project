@@ -34,6 +34,7 @@ private:
     void printArray(const std::vector<llvm::Value*>& elements);
     void printArrayVar(llvm::Value* arrayPtr, uint64_t size);
     llvm::Value* generatePow(llvm::Value* base, llvm::Value* exp);
+    void generateTryCatch(TryCatchNode* node);
     llvm::Value* generateValue(ASTNode* node, llvm::Type* expectedType);
 };
 

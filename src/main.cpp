@@ -12,8 +12,7 @@
 
 // no support for "bool a = true, f, s = false;" structure
 // no -(z/2) no i = -1 + 2;
-// bug in for-loop when running
-// no array available to test foreach
+// for and foreach (mostly for) has some problems, check its abilities and fix them
 int main(int argc, char* argv[]) {
     std::string source = argv[1];  // Changed this line only
     

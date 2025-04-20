@@ -27,6 +27,9 @@ struct Token {
         Add, 
         Subtract, 
         Divide,
+        Try, 
+        Catch, 
+        Dot,
         /* signs begin */ 
         Equal, 
         DoubleQuotation,
