@@ -73,11 +73,12 @@ Token Lexer::nextToken() {
     
     size_t token_start_column = column;
     
-    if (std::isalpha(c)) {
+    if (std::isalpha(c) || c == '_') {
         size_t start = pos; ///////////////////////////////
         pos++;
         column++;
-        while (pos < source.size() && std::isalnum(source[pos])) {
+        if(c == '_' || std::isdigit(source[pos])) throw std::runtime_error("Parser-Error: Names can not begin with numbers.");
+        while (pos < source.size() && (std::isalnum(source[pos]) || source[pos] == '_')) {
             pos++;
             column++;
         }
@@ -192,6 +193,15 @@ Token Lexer::nextToken() {
         return {Token::LeftBracket, "", line, column};
     }
 
+    if (c == '%') {
+        pos++; column++;
+        if (peek() == '=') {
+            pos++; column++;
+            return {Token::ModuloEqual, "", line, column};
+        }
+        return {Token::Modulo, "", line, column};
+    }
+
     if (c == ']') {
         pos++;
         column++;
@@ -232,6 +242,12 @@ Token Lexer::nextToken() {
             return {Token::And, "", line, column};
         }
         // not defined yet. in case of use will return error
+    }
+
+    if (c == '^') {
+        pos++;
+        column++;
+        return {Token::Xor, "^", line, column};
     }
 
     if (c == '|') {

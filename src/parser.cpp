@@ -6,7 +6,7 @@ Parser::Parser(Lexer& lexer) : lexer(lexer) {
     currentToken = lexer.nextToken();
     peekToken = lexer.nextToken();
 }
-//  switches to the next Token
+
 void Parser::advance() {
     currentToken = peekToken;
     peekToken = lexer.nextToken();
@@ -157,12 +157,19 @@ std::unique_ptr<ASTNode> Parser::parseExpression() {
            currentToken.type == Token::NotEqual || currentToken.type == Token::Greater ||
            currentToken.type == Token::GreaterEqual || currentToken.type == Token::Less ||
            currentToken.type == Token::And || currentToken.type == Token::Or ||
-           currentToken.type == Token::SignedIntLiteral ) {
+           currentToken.type == Token::SignedIntLiteral || currentToken.type == Token::Modulo ||
+           currentToken.type == Token::Xor  ) {
         BinaryOp op;
         if (currentToken.type == Token::Plus) {
             advance(); // Consume '+'
             auto right = parsePrimary();
             // Handle string concatenation
+            if (op == BinaryOp::XOR) {
+                if (!dynamic_cast<BoolLiteral*>(left.get()) && !dynamic_cast<VarRefNode*>(left.get()) &&
+                    !dynamic_cast<BoolLiteral*>(right.get()) && !dynamic_cast<VarRefNode*>(right.get())) {
+                    throw std::runtime_error("XOR requires boolean operands at line " + std::to_string(currentToken.line));
+                }
+            }
             if (dynamic_cast<StrLiteral*>(left.get()) || dynamic_cast<StrLiteral*>(right.get()) ||
                 dynamic_cast<VarRefNode*>(left.get()) || dynamic_cast<VarRefNode*>(right.get())) {    //   needs to be corrected
                 left = std::make_unique<ConcatNode>(std::move(left), std::move(right));
@@ -185,6 +192,8 @@ std::unique_ptr<ASTNode> Parser::parseExpression() {
                 case Token::Less: op = BinaryOp::LESS; break;
                 case Token::And: op = BinaryOp::AND; break;
                 case Token::Or: op = BinaryOp::OR; break;
+                case Token::Modulo: op = BinaryOp::MODULO; break;
+                case Token::Xor: op = BinaryOp::XOR; break; 
                 // case Token::IntLiteral: BinaryOp::ADD; break;
                 default: throw std::runtime_error("Unknown binary operator");
             }
@@ -297,7 +306,9 @@ std::unique_ptr<ASTNode> Parser::parsePrimary() {
         if (currentToken.type != Token::RightBracket) {
             do {
                 auto expr = parseExpression();
-                if (!expr || (!dynamic_cast<IntLiteral*>(expr.get()) && !dynamic_cast<VarRefNode*>(expr.get()))) {
+                if (!expr || (!dynamic_cast<IntLiteral*>(expr.get()) && !dynamic_cast<VarRefNode*>(expr.get()) &&
+                !dynamic_cast<StrLiteral*>(expr.get()) && !dynamic_cast<BoolLiteral*>(expr.get()) &&
+                !dynamic_cast<CharLiteral*>(expr.get()))) {
                     throw std::runtime_error("Array elements must be integers or identifiers");
                 }
                 elements.push_back(std::move(expr));
@@ -492,7 +503,6 @@ std::unique_ptr<ASTNode> Parser::parsePrimary() {
     }
 }
 
-//std::unique_ptr<ASTNode> Parser::parseVarDecWithoutAssignment() 
 std::unique_ptr<ASTNode> Parser::parseVarDeclMultiVariable(VarType type, std::string name) {
     int counter = 1; // might not be neccesary
     std::vector<std::string> IdentNames;
@@ -531,6 +541,21 @@ std::unique_ptr<ASTNode> Parser::parseVarDeclMultiVariable(VarType type, std::st
         advance();
         if (currentToken.type == Token::Comma) return parseVarDeclMultiBoth(type, std::move(value), IdentNames);
     }
+    else if (type == VarType::FLOAT && (currentToken.type == Token::FloatLiteral || currentToken.type == Token::IntLiteral)) {
+        value = std::make_unique<FloatLiteral>(std::stof(currentToken.lexeme));
+        advance();
+        if(currentToken.type == Token::Comma) return parseVarDeclMultiBoth(type, std::move(value), IdentNames);
+    }
+    else if (type == VarType::BOOL && currentToken.type == Token::BoolLiteral) {
+        value = std::make_unique<BoolLiteral>(currentToken.lexeme == "true");
+        advance();
+        if(currentToken.type == Token::Comma) return parseVarDeclMultiBoth(type, std::move(value), IdentNames);
+    }
+    else if (type == VarType::CHAR && currentToken.type == Token::CharLiteral) {
+        value = std::make_unique<CharLiteral>(currentToken.lexeme[0]);
+        advance();
+        if(currentToken.type == Token::Comma) return parseVarDeclMultiBoth(type, std::move(value), IdentNames);
+    }
     else {
         throw std::runtime_error("Type mismatch in variable declaration(2)");
     }
@@ -557,6 +582,12 @@ std::unique_ptr<ASTNode> Parser::parseVarDeclMultiVariable(VarType type, std::st
                 }
             }
             valueCopy = std::make_unique<ArrayLiteralNode>(std::move(elementsCopy));
+        } else if (auto* floatLit = dynamic_cast<FloatLiteral*>(value.get())) {
+            valueCopy = std::make_unique<FloatLiteral>(floatLit->value);
+        } else if (auto* boolLit = dynamic_cast<BoolLiteral*>(value.get())) {
+            valueCopy = std::make_unique<BoolLiteral>(boolLit->value);
+        } else if (auto* charLit = dynamic_cast<CharLiteral*>(value.get())) {
+            valueCopy = std::make_unique<CharLiteral>(charLit->value);
         } else {
             throw std::runtime_error("Unsupported value type in declaration");
         }
@@ -584,11 +615,18 @@ std::unique_ptr<ASTNode> Parser::parseVarDeclMultiBoth(VarType type, std::unique
             value = std::make_unique<IntLiteral>(std::stoi(currentToken.lexeme));
         } else if (type == VarType::STRING && currentToken.type == Token::StrLiteral) {
             value = std::make_unique<StrLiteral>(currentToken.lexeme);
+            
         } else if (type == VarType::ARRAY && currentToken.type == Token::LeftBracket) { // NEW: Array literal
             value = parsePrimary();
             if (!dynamic_cast<ArrayLiteralNode*>(value.get())) {
                 throw std::runtime_error("Array initializer must be an array literal");
             }
+        } else if (type == VarType::FLOAT && (currentToken.type == Token::FloatLiteral || currentToken.type == Token::IntLiteral)) {
+            value = std::make_unique<FloatLiteral>(std::stof(currentToken.lexeme));
+        } else if (type == VarType::BOOL && currentToken.type == Token::BoolLiteral) {
+            value = std::make_unique<BoolLiteral>(currentToken.lexeme == "true");
+        } else if (type == VarType::CHAR && currentToken.type == Token::CharLiteral) {
+            value = std::make_unique<CharLiteral>(currentToken.lexeme[0]);
         } else {
             throw std::runtime_error("Type mismatch in variable declaration(4)");
         }
@@ -616,7 +654,9 @@ std::unique_ptr<ASTNode> Parser::parseAssignment() {
         if (!index) {
             throw std::runtime_error("Expected index expression in array access at line " + std::to_string(currentToken.line));
         }
-        if (!dynamic_cast<IntLiteral*>(index.get()) && !dynamic_cast<VarRefNode*>(index.get())) {
+        if (!dynamic_cast<IntLiteral*>(index.get()) && !dynamic_cast<VarRefNode*>(index.get()) &&
+        !dynamic_cast<StrLiteral*>(index.get()) && !dynamic_cast<BoolLiteral*>(index.get()) &&
+        !dynamic_cast<CharLiteral*>(index.get())) {
             throw std::runtime_error("Array index must be an integer or identifier at line " + std::to_string(currentToken.line));
         }
         if (currentToken.type != Token::RightBracket) {
@@ -655,6 +695,10 @@ std::unique_ptr<ASTNode> Parser::parseAssignment() {
         compoundOp = BinaryOp::DIVIDE;
         isCompound = true;
         advance();
+    } else if (currentToken.type == Token::ModuloEqual) { // NEW: Added %= support
+        compoundOp = BinaryOp::MODULO;
+        isCompound = true;
+        advance();
     } else {
         throw std::runtime_error("Expected '=' or compound assignment operator");
     }
@@ -667,6 +711,12 @@ std::unique_ptr<ASTNode> Parser::parseAssignment() {
     // advance(); // Consume ;
 
     if (isCompound) {
+        if (!dynamic_cast<IntLiteral*>(value.get()) && 
+            !dynamic_cast<FloatLiteral*>(value.get()) && 
+            !dynamic_cast<VarRefNode*>(value.get())) {
+            throw std::runtime_error("Divide-equal (/=) expression must be an int or float literal or variable at line " + 
+                                    std::to_string(currentToken.line));
+        }
         return std::make_unique<CompoundAssignNode>(name, compoundOp, std::move(value));
     } else {
         return std::make_unique<AssignNode>(name, std::move(value));

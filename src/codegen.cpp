@@ -1,7 +1,6 @@
 #include "codegen.h"
 #include <llvm/IR/Verifier.h>
 #include <stdexcept>
-#include <stdexcept>
 
 using namespace llvm;
 
@@ -169,6 +168,10 @@ void CodeGen::generateCompoundAssign(CompoundAssignNode* node) {
             result = type->isFloatTy() ? builder->CreateFDiv(current, rhs)
                                        : builder->CreateSDiv(current, rhs);  // Signed integer division
             break;
+        case BinaryOp::MODULO: // NEW: Added modulo case
+            result = type->isFloatTy() ? builder->CreateFRem(current, rhs)
+                                        : builder->CreateSRem(current, rhs);
+            break;
         default:
             throw std::runtime_error("Unsupported compound assignment operator");
     }
@@ -223,12 +226,72 @@ void CodeGen::generatePrint(PrintNode* node) {
     Type* valueType = nullptr;
 
     if (auto* arrLit = dynamic_cast<ArrayLiteralNode*>(node->expr.get())) {
-        // Print array as [a, b, c]
+        // CHANGED: Updated to support all variable types
+        Type* elemType = Type::getInt32Ty(*context); // Default
+        if (!arrLit->elements.empty()) {
+            ASTNode* firstElem = arrLit->elements[0].get();
+            if (dynamic_cast<IntLiteral*>(firstElem)) {
+                elemType = Type::getInt32Ty(*context);
+            } else if (dynamic_cast<FloatLiteral*>(firstElem)) {
+                elemType = Type::getFloatTy(*context);
+            } else if (dynamic_cast<BoolLiteral*>(firstElem)) {
+                elemType = Type::getInt1Ty(*context);
+            } else if (dynamic_cast<CharLiteral*>(firstElem)) {
+                elemType = Type::getInt8Ty(*context);
+            } else if (dynamic_cast<StrLiteral*>(firstElem)) {
+                elemType = PointerType::get(Type::getInt8Ty(*context), 0);
+            } else if (dynamic_cast<VarRefNode*>(firstElem)) {
+                auto it = symbols.find(dynamic_cast<VarRefNode*>(firstElem)->name);
+                if (it != symbols.end()) {
+                    Type* varType = it->second->getAllocatedType();
+                    // NEW: Use getContainedType for LLVM compatibility
+                    if (varType->isPointerTy()) {
+                        elemType = dyn_cast<PointerType>(varType)->getContainedType(0);
+                    } else {
+                        elemType = varType;
+                    }
+                }
+            }
+        }
         std::vector<Value*> elements;
         for (const auto& elem : arrLit->elements) {
-            elements.push_back(generateValue(elem.get(), Type::getInt32Ty(*context)));
+            // CHANGED: Use inferred elemType instead of int32
+            elements.push_back(generateValue(elem.get(), elemType));
         }
-        printArray(elements);
+        // NEW: Inline printArray logic
+        Type* int32Ty = Type::getInt32Ty(*context);
+        Constant* openBracket = ConstantDataArray::getString(*context, "[", true);
+        GlobalVariable* openGV = new GlobalVariable(
+            *module, openBracket->getType(), true, GlobalValue::PrivateLinkage, openBracket, ".arr_open");
+        Value* openPtr = builder->CreateGEP(
+            openBracket->getType(), openGV, {ConstantInt::get(int32Ty, 0), ConstantInt::get(int32Ty, 0)});
+        builder->CreateCall(module->getFunction("printf"), {openPtr});
+        for (size_t i = 0; i < elements.size(); ++i) {
+            std::string formatStr = elemType == Type::getInt32Ty(*context) ? "%d" :
+                                   elemType == Type::getFloatTy(*context) ? "%g" :
+                                   elemType == Type::getInt1Ty(*context) ? "%d" :
+                                   elemType == Type::getInt8Ty(*context) ? "%c" :
+                                   "%s";
+            if (i < elements.size() - 1) formatStr += ", ";
+            Constant* formatConst = ConstantDataArray::getString(*context, formatStr, true);
+            GlobalVariable* formatGV = new GlobalVariable(
+                *module, formatConst->getType(), true, GlobalValue::PrivateLinkage, formatConst, ".arr_elem");
+            Value* formatPtr = builder->CreateGEP(
+                formatConst->getType(), formatGV, {ConstantInt::get(int32Ty, 0), ConstantInt::get(int32Ty, 0)});
+            Value* printVal = elements[i];
+            if (elemType == Type::getFloatTy(*context)) {
+                printVal = builder->CreateFPExt(printVal, Type::getDoubleTy(*context));
+            } else if (elemType == Type::getInt1Ty(*context) || elemType == Type::getInt8Ty(*context)) {
+                printVal = builder->CreateZExt(printVal, int32Ty);
+            }
+            builder->CreateCall(module->getFunction("printf"), {formatPtr, printVal});
+        }
+        Constant* closeBracket = ConstantDataArray::getString(*context, "]\n", true);
+        GlobalVariable* closeGV = new GlobalVariable(
+            *module, closeBracket->getType(), true, GlobalValue::PrivateLinkage, closeBracket, ".arr_close");
+        Value* closePtr = builder->CreateGEP(
+            closeBracket->getType(), closeGV, {ConstantInt::get(int32Ty, 0), ConstantInt::get(int32Ty, 0)});
+        builder->CreateCall(module->getFunction("printf"), {closePtr});
         return;
     } else if (auto* varRef = dynamic_cast<VarRefNode*>(node->expr.get())) {
         auto it = symbols.find(varRef->name);
@@ -236,56 +299,123 @@ void CodeGen::generatePrint(PrintNode* node) {
             throw std::runtime_error("Undefined variable: " + varRef->name);
         }
         valueType = it->second->getAllocatedType();
+        value = builder->CreateLoad(valueType, it->second);
         if (valueType == PointerType::get(Type::getInt8Ty(*context), 0)) { // String variable
-            value = builder->CreateLoad(valueType, it->second);
-            valueType = PointerType::get(Type::getInt8Ty(*context), 0);
-        } else if (valueType == PointerType::get(Type::getInt32Ty(*context), 0)) { // Array variable
-            value = builder->CreateLoad(valueType, it->second);
+            // Already loaded correctly
+        } else if (valueType->isPointerTy()) { // CHANGED: Updated to support all array types
             auto sizeIt = arraySizes.find(varRef->name);
-            uint64_t size = sizeIt != arraySizes.end() ? sizeIt->second : 5; // Fallback
+            uint64_t size = sizeIt != arraySizes.end() ? sizeIt->second : 5;
+            // NEW: Inline printArrayVar logic with dynamic element type
+            Type* elemType = dyn_cast<PointerType>(valueType)->getContainedType(0);
+            Type* int32Ty = Type::getInt32Ty(*context);
+            Constant* openBracket = ConstantDataArray::getString(*context, "[", true);
+            GlobalVariable* openGV = new GlobalVariable(
+                *module, openBracket->getType(), true, GlobalValue::PrivateLinkage, openBracket, ".arr_open");
+            Value* openPtr = builder->CreateGEP(
+                openBracket->getType(), openGV, {ConstantInt::get(int32Ty, 0), ConstantInt::get(int32Ty, 0)});
+            builder->CreateCall(module->getFunction("printf"), {openPtr});
+            Function* func = builder->GetInsertBlock()->getParent();
+            BasicBlock* loopStart = BasicBlock::Create(*context, "arr_print_loop", func);
+            BasicBlock* loopBody = BasicBlock::Create(*context, "arr_print_body", func);
+            BasicBlock* loopEnd = BasicBlock::Create(*context, "arr_print_end", func);
+            AllocaInst* index = builder->CreateAlloca(int32Ty, nullptr, "print_idx");
+            builder->CreateStore(ConstantInt::get(int32Ty, 0), index);
+            builder->CreateBr(loopStart);
+            builder->SetInsertPoint(loopStart);
+            Value* idx = builder->CreateLoad(int32Ty, index);
+            Value* cond = builder->CreateICmpSLT(idx, ConstantInt::get(int32Ty, size));
+            builder->CreateCondBr(cond, loopBody, loopEnd);
+            builder->SetInsertPoint(loopBody);
+            Value* elemPtr = builder->CreateGEP(elemType, value, idx);
+            Value* elem = builder->CreateLoad(elemType, elemPtr);
+            std::string formatStr = elemType == Type::getInt32Ty(*context) ? "%d" :
+                                   elemType == Type::getFloatTy(*context) ? "%g" :
+                                   elemType == Type::getInt1Ty(*context) ? "%d" :
+                                   elemType == Type::getInt8Ty(*context) ? "%c" :
+                                   "%s";
+            Constant* formatConst = ConstantDataArray::getString(*context, formatStr, true);
+            GlobalVariable* formatGV = new GlobalVariable(
+                *module, formatConst->getType(), true, GlobalValue::PrivateLinkage, formatConst, ".arr_elem");
+            Value* formatPtr = builder->CreateGEP(
+                formatConst->getType(), formatGV, {ConstantInt::get(int32Ty, 0), ConstantInt::get(int32Ty, 0)});
+            Value* printVal = elem;
+            if (elemType == Type::getFloatTy(*context)) {
+                printVal = builder->CreateFPExt(printVal, Type::getDoubleTy(*context));
+            } else if (elemType == Type::getInt1Ty(*context) || elemType == Type::getInt8Ty(*context)) {
+                printVal = builder->CreateZExt(printVal, int32Ty);
+            }
+            builder->CreateCall(module->getFunction("printf"), {formatPtr, printVal});
+            Value* isNotLast = builder->CreateICmpSLT(
+                idx, ConstantInt::get(int32Ty, size - 1));
+            BasicBlock* commaBB = BasicBlock::Create(*context, "print_comma", func);
+            BasicBlock* afterCommaBB = BasicBlock::Create(*context, "after_comma", func);
+            builder->CreateCondBr(isNotLast, commaBB, afterCommaBB);
+            builder->SetInsertPoint(commaBB);
+            Constant* commaStr = ConstantDataArray::getString(*context, ", ", true);
+            GlobalVariable* commaGV = new GlobalVariable(
+                *module, commaStr->getType(), true, GlobalValue::PrivateLinkage, commaStr, ".comma");
+            Value* commaPtr = builder->CreateGEP(
+                commaStr->getType(), commaGV, {ConstantInt::get(int32Ty, 0), ConstantInt::get(int32Ty, 0)});
+            builder->CreateCall(module->getFunction("printf"), {commaPtr});
+            builder->CreateBr(afterCommaBB);
+            builder->SetInsertPoint(afterCommaBB);
+            Value* nextIdx = builder->CreateAdd(idx, ConstantInt::get(int32Ty, 1));
+            builder->CreateStore(nextIdx, index);
+            builder->CreateBr(loopStart);
+            builder->SetInsertPoint(loopEnd);
+            Constant* closeBracket = ConstantDataArray::getString(*context, "]\n", true);
+            GlobalVariable* closeGV = new GlobalVariable(
+                *module, closeBracket->getType(), true, GlobalValue::PrivateLinkage, closeBracket, ".arr_close");
+            Value* closePtr = builder->CreateGEP(
+                closeBracket->getType(), closeGV, {ConstantInt::get(int32Ty, 0), ConstantInt::get(int32Ty, 0)});
+            builder->CreateCall(module->getFunction("printf"), {closePtr});
+            return;
+        }
+    } else if (auto* intLit = dynamic_cast<IntLiteral*>(node->expr.get())) {
+        value = generateValue(node->expr.get(), Type::getInt32Ty(*context));
+        valueType = Type::getInt32Ty(*context);
+    } else if (auto* floatLit = dynamic_cast<FloatLiteral*>(node->expr.get())) {
+        value = generateValue(node->expr.get(), Type::getFloatTy(*context));
+        valueType = Type::getFloatTy(*context);
+    } else if (auto* boolLit = dynamic_cast<BoolLiteral*>(node->expr.get())) {
+        value = generateValue(node->expr.get(), Type::getInt1Ty(*context));
+        valueType = Type::getInt1Ty(*context);
+    } else if (auto* charLit = dynamic_cast<CharLiteral*>(node->expr.get())) {
+        value = generateValue(node->expr.get(), Type::getInt8Ty(*context));
+        valueType = Type::getInt8Ty(*context);
+    } else if (auto* strLit = dynamic_cast<StrLiteral*>(node->expr.get())) {
+        value = generateValue(node->expr.get(), PointerType::get(Type::getInt8Ty(*context), 0));
+        valueType = PointerType::get(Type::getInt8Ty(*context), 0);
+    } else if (auto* concat = dynamic_cast<ConcatNode*>(node->expr.get())) {
+        value = generateValue(node->expr.get(), PointerType::get(Type::getInt8Ty(*context), 0));
+        valueType = PointerType::get(Type::getInt8Ty(*context), 0);
+    } else if (auto* binOp = dynamic_cast<BinaryOpNode*>(node->expr.get())) {
+        if (binOp->op == BinaryOp::EQUAL || binOp->op == BinaryOp::LESS_EQUAL ||
+            binOp->op == BinaryOp::NOT_EQUAL || binOp->op == BinaryOp::GREATER ||
+            binOp->op == BinaryOp::GREATER_EQUAL || binOp->op == BinaryOp::LESS ||
+            binOp->op == BinaryOp::AND || binOp->op == BinaryOp::OR) {
+            value = generateValue(node->expr.get(), Type::getInt1Ty(*context));
+            valueType = Type::getInt1Ty(*context);
+        } else if (binOp->op == BinaryOp::INDEX) {
+            value = generateValue(node->expr.get(), Type::getInt32Ty(*context));
+            valueType = Type::getInt32Ty(*context);
+        } else if (binOp->op == BinaryOp::MULTIPLY_ARRAY || binOp->op == BinaryOp::ADD_ARRAY ||
+                   binOp->op == BinaryOp::SUBTRACT_ARRAY || binOp->op == BinaryOp::DIVIDE_ARRAY) {
+            value = generateValue(node->expr.get(), PointerType::get(Type::getInt32Ty(*context), 0));
+            valueType = PointerType::get(Type::getInt32Ty(*context), 0);
+            auto* varRef = dynamic_cast<VarRefNode*>(binOp->left.get());
+            uint64_t size = 5;
+            if (varRef) {
+                auto sizeIt = arraySizes.find(varRef->name);
+                if (sizeIt != arraySizes.end()) size = sizeIt->second;
+            }
             printArrayVar(value, size);
             return;
         } else {
-            value = generateValue(node->expr.get(), valueType);
+            value = generateValue(node->expr.get(), Type::getInt32Ty(*context));
+            valueType = Type::getInt32Ty(*context);
         }
-    } else if (dynamic_cast<IntLiteral*>(node->expr.get())) {
-        value = generateValue(node->expr.get(), Type::getInt32Ty(*context));
-        valueType = Type::getInt32Ty(*context);
-    } else if (dynamic_cast<BinaryOpNode*>(node->expr.get())) {
-        if (auto binOp = dynamic_cast<BinaryOpNode*>(node->expr.get())) {
-            if (binOp->op == BinaryOp::EQUAL || binOp->op == BinaryOp::LESS_EQUAL ||
-                binOp->op == BinaryOp::NOT_EQUAL || binOp->op == BinaryOp::GREATER ||
-                binOp->op == BinaryOp::GREATER_EQUAL || binOp->op == BinaryOp::LESS ||
-                binOp->op == BinaryOp::AND || binOp->op == BinaryOp::OR) {
-                value = generateValue(node->expr.get(), Type::getInt1Ty(*context));
-                valueType = Type::getInt1Ty(*context);
-            } else if (binOp->op == BinaryOp::INDEX) {
-                value = generateValue(node->expr.get(), Type::getInt32Ty(*context));
-                valueType = Type::getInt32Ty(*context);
-            } else if (binOp->op == BinaryOp::MULTIPLY_ARRAY || binOp->op == BinaryOp::ADD_ARRAY ||
-                       binOp->op == BinaryOp::SUBTRACT_ARRAY || binOp->op == BinaryOp::DIVIDE_ARRAY) {
-                value = generateValue(node->expr.get(), PointerType::get(Type::getInt32Ty(*context), 0));
-                valueType = PointerType::get(Type::getInt32Ty(*context), 0);
-                auto* varRef = dynamic_cast<VarRefNode*>(binOp->left.get());
-                uint64_t size = 5;
-                if (varRef) {
-                    auto sizeIt = arraySizes.find(varRef->name);
-                    if (sizeIt != arraySizes.end()) size = sizeIt->second;
-                }
-                printArrayVar(value, size);
-                return;
-            } else {
-                value = generateValue(node->expr.get(), Type::getInt32Ty(*context));
-                valueType = Type::getInt32Ty(*context);
-            }
-        }
-    } else if (auto strLit = dynamic_cast<StrLiteral*>(node->expr.get())) {
-        value = generateValue(node->expr.get(), PointerType::get(Type::getInt8Ty(*context), 0));
-        valueType = PointerType::get(Type::getInt8Ty(*context), 0);
-    } else if (auto concat = dynamic_cast<ConcatNode*>(node->expr.get())) {
-        value = generateValue(node->expr.get(), PointerType::get(Type::getInt8Ty(*context), 0));
-        valueType = PointerType::get(Type::getInt8Ty(*context), 0);
-    } else if (auto unaryOp = dynamic_cast<UnaryOpNode*>(node->expr.get())) {
+    } else if (auto* unaryOp = dynamic_cast<UnaryOpNode*>(node->expr.get())) {
         value = generateValue(node->expr.get(), Type::getInt32Ty(*context));
         valueType = Type::getInt32Ty(*context);
     } else {
@@ -296,55 +426,43 @@ void CodeGen::generatePrint(PrintNode* node) {
     if (valueType == Type::getInt32Ty(*context)) {
         Constant* formatStr = ConstantDataArray::getString(*context, "%d\n", true);
         GlobalVariable* formatGV = new GlobalVariable(
-            *module,
-            formatStr->getType(),
-            true,
-            GlobalValue::PrivateLinkage,
-            formatStr,
-            ".int_fmt"
-        );
+            *module, formatStr->getType(), true, GlobalValue::PrivateLinkage, formatStr, ".int_fmt");
         Value* formatPtr = builder->CreateGEP(
-            formatStr->getType(),
-            formatGV,
-            {ConstantInt::get(int32Ty, 0), ConstantInt::get(int32Ty, 0)},
-            "int_fmt"
-        );
+            formatStr->getType(), formatGV, {ConstantInt::get(int32Ty, 0), ConstantInt::get(int32Ty, 0)});
         builder->CreateCall(module->getFunction("printf"), {formatPtr, value});
+    } else if (valueType == Type::getFloatTy(*context)) {
+        Constant* formatStr = ConstantDataArray::getString(*context, "%g\n", true);
+        GlobalVariable* formatGV = new GlobalVariable(
+            *module, formatStr->getType(), true, GlobalValue::PrivateLinkage, formatStr, ".float_fmt");
+        Value* formatPtr = builder->CreateGEP(
+            formatStr->getType(), formatGV, {ConstantInt::get(int32Ty, 0), ConstantInt::get(int32Ty, 0)});
+        Value* extValue = builder->CreateFPExt(value, Type::getDoubleTy(*context)); // printf expects double
+        builder->CreateCall(module->getFunction("printf"), {formatPtr, extValue});
     } else if (valueType == Type::getInt1Ty(*context)) {
         Constant* formatStr = ConstantDataArray::getString(*context, "%d\n", true);
         GlobalVariable* formatGV = new GlobalVariable(
-            *module,
-            formatStr->getType(),
-            true,
-            GlobalValue::PrivateLinkage,
-            formatStr,
-            ".bool_fmt"
-        );
+            *module, formatStr->getType(), true, GlobalValue::PrivateLinkage, formatStr, ".bool_fmt");
         Value* formatPtr = builder->CreateGEP(
-            formatStr->getType(),
-            formatGV,
-            {ConstantInt::get(int32Ty, 0), ConstantInt::get(int32Ty, 0)},
-            "bool_fmt"
-        );
-        Value* extValue = builder->CreateZExt(value, int32Ty, "bool_ext");
+            formatStr->getType(), formatGV, {ConstantInt::get(int32Ty, 0), ConstantInt::get(int32Ty, 0)});
+        Value* extValue = builder->CreateZExt(value, int32Ty);
+        builder->CreateCall(module->getFunction("printf"), {formatPtr, extValue});
+    } else if (valueType == Type::getInt8Ty(*context)) {
+        Constant* formatStr = ConstantDataArray::getString(*context, "%c\n", true);
+        GlobalVariable* formatGV = new GlobalVariable(
+            *module, formatStr->getType(), true, GlobalValue::PrivateLinkage, formatStr, ".char_fmt");
+        Value* formatPtr = builder->CreateGEP(
+            formatStr->getType(), formatGV, {ConstantInt::get(int32Ty, 0), ConstantInt::get(int32Ty, 0)});
+        Value* extValue = builder->CreateZExt(value, int32Ty); // printf expects int for %c
         builder->CreateCall(module->getFunction("printf"), {formatPtr, extValue});
     } else if (valueType == PointerType::get(Type::getInt8Ty(*context), 0)) {
         Constant* formatStr = ConstantDataArray::getString(*context, "%s\n", true);
         GlobalVariable* formatGV = new GlobalVariable(
-            *module,
-            formatStr->getType(),
-            true,
-            GlobalValue::PrivateLinkage,
-            formatStr,
-            ".str_fmt"
-        );
+            *module, formatStr->getType(), true, GlobalValue::PrivateLinkage, formatStr, ".str_fmt");
         Value* formatPtr = builder->CreateGEP(
-            formatStr->getType(),
-            formatGV,
-            {ConstantInt::get(int32Ty, 0), ConstantInt::get(int32Ty, 0)},
-            "str_fmt"
-        );
+            formatStr->getType(), formatGV, {ConstantInt::get(int32Ty, 0), ConstantInt::get(int32Ty, 0)});
         builder->CreateCall(module->getFunction("printf"), {formatPtr, value});
+    } else {
+        throw std::runtime_error("Unsupported type in print()");
     }
 }
 
@@ -802,9 +920,39 @@ llvm::Value* CodeGen::generateValue(ASTNode* node, llvm::Type* expectedType) {
         if (!expectedType->isPointerTy()) {
             throw std::runtime_error("Expected pointer type for array");
         }
+        // CHANGED: Dynamically infer element type
+        Type* elemType = Type::getInt32Ty(*context); // Default
+        if (!arrLit->elements.empty()) {
+            ASTNode* firstElem = arrLit->elements[0].get();
+            if (dynamic_cast<IntLiteral*>(firstElem)) {
+                elemType = Type::getInt32Ty(*context);
+            } else if (dynamic_cast<FloatLiteral*>(firstElem)) {
+                elemType = Type::getFloatTy(*context);
+            } else if (dynamic_cast<BoolLiteral*>(firstElem)) {
+                elemType = Type::getInt1Ty(*context);
+            } else if (dynamic_cast<CharLiteral*>(firstElem)) {
+                elemType = Type::getInt8Ty(*context);
+            } else if (dynamic_cast<StrLiteral*>(firstElem)) {
+                elemType = PointerType::get(Type::getInt8Ty(*context), 0);
+            } else if (dynamic_cast<VarRefNode*>(firstElem)) {
+                auto it = symbols.find(dynamic_cast<VarRefNode*>(firstElem)->name);
+                if (it != symbols.end()) {
+                    Type* varType = it->second->getAllocatedType();
+                    // NEW: Use getContainedType for LLVM compatibility
+                    if (varType->isPointerTy()) {
+                        elemType = dyn_cast<PointerType>(varType)->getContainedType(0);
+                    } else {
+                        elemType = varType;
+                    }
+                }
+            }
+        }
         size_t size = arrLit->elements.size();
-        Type* elemType = Type::getInt32Ty(*context);
-        Value* sizeVal = ConstantInt::get(Type::getInt32Ty(*context), size * 4);
+        // NEW: Allocate based on element type size
+        unsigned elemSize = elemType == Type::getFloatTy(*context) || elemType == Type::getInt32Ty(*context) ? 4 :
+                            elemType == Type::getInt1Ty(*context) ? 1 :
+                            elemType == Type::getInt8Ty(*context) ? 1 : 8; // i8* assumed 8 bytes
+        Value* sizeVal = ConstantInt::get(Type::getInt32Ty(*context), size * elemSize);
         Value* mallocCall = builder->CreateCall(module->getFunction("malloc"), sizeVal);
         Value* arrayPtr = builder->CreateBitCast(mallocCall, PointerType::get(elemType, 0));
         for (size_t i = 0; i < size; ++i) {
@@ -833,9 +981,9 @@ llvm::Value* CodeGen::generateValue(ASTNode* node, llvm::Type* expectedType) {
         if (binOp->op == BinaryOp::EQUAL || binOp->op == BinaryOp::LESS_EQUAL ||
             binOp->op == BinaryOp::NOT_EQUAL || binOp->op == BinaryOp::GREATER ||
             binOp->op == BinaryOp::GREATER_EQUAL || binOp->op == BinaryOp::LESS ||
-            binOp->op == BinaryOp::AND || binOp->op == BinaryOp::OR || binOp->op == BinaryOp::POW) {
-            Value* left = generateValue(binOp->left.get(), binOp->op == BinaryOp::AND || binOp->op == BinaryOp::OR ? Type::getInt1Ty(*context) : Type::getInt32Ty(*context));
-            Value* right = generateValue(binOp->right.get(), binOp->op == BinaryOp::AND || binOp->op == BinaryOp::OR ? Type::getInt1Ty(*context) : Type::getInt32Ty(*context));
+            binOp->op == BinaryOp::AND || binOp->op == BinaryOp::OR || binOp->op == BinaryOp::XOR || binOp->op == BinaryOp::POW) {
+            Value* left = generateValue(binOp->left.get(), binOp->op == BinaryOp::AND || binOp->op == BinaryOp::OR || binOp->op == BinaryOp::XOR ? Type::getInt1Ty(*context) : Type::getInt32Ty(*context));
+            Value* right = generateValue(binOp->right.get(), binOp->op == BinaryOp::AND || binOp->op == BinaryOp::OR || binOp->op == BinaryOp::XOR ? Type::getInt1Ty(*context) : Type::getInt32Ty(*context));
             switch (binOp->op) {
                 case BinaryOp::EQUAL: return builder->CreateICmpEQ(left, right);
                 case BinaryOp::LESS_EQUAL: return builder->CreateICmpSLE(left, right);
@@ -846,6 +994,9 @@ llvm::Value* CodeGen::generateValue(ASTNode* node, llvm::Type* expectedType) {
                 case BinaryOp::AND: return builder->CreateAnd(left, right);
                 case BinaryOp::OR: return builder->CreateOr(left, right);
                 case BinaryOp::POW: return generatePow(left, right);
+                case BinaryOp::XOR: return builder->CreateXor(left, right);
+                
+                
                 default: throw std::runtime_error("Unreachable");
             }
         } else if (binOp->op == BinaryOp::INDEX) {
@@ -922,6 +1073,10 @@ llvm::Value* CodeGen::generateValue(ASTNode* node, llvm::Type* expectedType) {
             case BinaryOp::DIVIDE:
                 return expectedType->isFloatTy() ? builder->CreateFDiv(left, right)
                                                 : builder->CreateSDiv(left, right);
+            case BinaryOp::MODULO: // NEW: Added modulo case
+                return left->getType()->isFloatTy() ? builder->CreateFRem(left, right)
+                                                : builder->CreateSRem(left, right);
+
             default:
                 throw std::runtime_error("Unsupported binary operator");
         }
@@ -1035,15 +1190,28 @@ llvm::Value* CodeGen::generateValue(ASTNode* node, llvm::Type* expectedType) {
             }
         }
         throw std::runtime_error("Unsupported unary operator");
-    }
+    } else if (auto floatLit = dynamic_cast<FloatLiteral*>(node)) {
+        if (expectedType && !expectedType->isFloatTy()) {
+            throw std::runtime_error("Expected float type");
+        }
+        return ConstantFP::get(Type::getFloatTy(*context), floatLit->value);
+    } else if (auto boolLit = dynamic_cast<BoolLiteral*>(node)) {
+        if (expectedType && !expectedType->isIntegerTy(1)) {
+            throw std::runtime_error("Expected boolean type");
+        }
+        return ConstantInt::get(Type::getInt1Ty(*context), boolLit->value);
+    } else if (auto charLit = dynamic_cast<CharLiteral*>(node)) {
+        if (expectedType && !expectedType->isIntegerTy(8)) {
+            throw std::runtime_error("Expected char (i8) type");
+        }
+        return ConstantInt::get(Type::getInt8Ty(*context), charLit->value);
+    } 
     throw std::runtime_error("Unsupported node type in generateValue");
 }
 
 void CodeGen::dump() const {
     module->print(llvm::outs(), nullptr);
 }
-
-#include <stdexcept>
 
 extern "C" void throw_exception(const char* message) {
     throw std::runtime_error(message);

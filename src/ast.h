@@ -7,7 +7,7 @@
 
 enum class VarType { INT, STRING, BOOL, FLOAT, CHAR, NEUTRAL, ARRAY, ERROR };
 enum class BinaryOp { ADD, SUBTRACT, MULTIPLY, DIVIDE, EQUAL, ABS, POW,
-     NOT_EQUAL, LESS, LESS_EQUAL, GREATER, GREATER_EQUAL, AND, OR , 
+     NOT_EQUAL, LESS, LESS_EQUAL, GREATER, GREATER_EQUAL, AND, OR , XOR, MODULO, 
      INDEX, MULTIPLY_ARRAY, ADD_ARRAY, SUBTRACT_ARRAY, DIVIDE_ARRAY, CONCAT, METHOD_CALL };
 enum class LoopType { For, Foreach };
 enum class UnaryOp { LENGTH, MIN, MAX, INCREMENT ,DECREMENT };
@@ -219,4 +219,5 @@ struct MatchNode : ASTNode {
     MatchNode(std::unique_ptr<ASTNode> expr, std::vector<std::unique_ptr<MatchCaseNode>> c)
         : expression(std::move(expr)), cases(std::move(c)) {}
 };
+
 #endif

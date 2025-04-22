@@ -30,6 +30,7 @@ struct Token {
         Try, 
         Catch, 
         Dot,
+        
         /* signs begin */ 
         Equal, 
         DoubleQuotation,
@@ -56,8 +57,11 @@ struct Token {
         LessEqual, 
         Greater, 
         GreaterEqual,
+        Modulo,
+        ModuloEqual,
         And,
         Or,
+        Xor,
         PlusPlus,
         MinusMinus,
         Match,
