@@ -4,7 +4,7 @@ CXXFLAGS = -std=c++17 -g -Wall -fexceptions -I$(LLVM_PREFIX)/include -I$(shell x
 LDFLAGS = -L$(LLVM_PREFIX)/lib $(shell $(LLVM_PREFIX)/bin/llvm-config --ldflags)
 LIBS = $(shell $(LLVM_PREFIX)/bin/llvm-config --libs core irreader support)
 
-SRC = main.cpp lexer.cpp parser.cpp codegen.cpp
+SRC = main.cpp lexer.cpp parser.cpp codegen.cpp semantic.cpp
 OBJ = $(SRC:.cpp=.o)
 
 compiler: $(OBJ)

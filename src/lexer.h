@@ -48,6 +48,7 @@ struct Token {
         LeftBrace,
         RightBrace,
         LeftParen,
+        negLeftParen,
         RightParen,
         LeftBracket,
         RightBracket,

@@ -130,6 +130,12 @@ Token Lexer::nextToken() {
             lexeme += c;
             pos++;
             column++;
+
+            if (peek() == '(') {
+                pos++;
+                column++;
+                return {Token::negLeftParen, lexeme + "=", line, column - 1};
+            }
             // Check for -= or +=
             if (peek() == '=') {
                 pos++;

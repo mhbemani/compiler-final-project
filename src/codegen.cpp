@@ -825,7 +825,15 @@ void CodeGen::generateMatch(MatchNode* node) {
     // Set insertion point to afterMatch
     builder->SetInsertPoint(afterMatch);
 }
-
+//if (currentToken.type == Token::UnaryMinusParen) {
+//    advance(); // consume '-('
+//    auto expr = parseExpression();
+//    if (currentToken.type != Token::RightParen) {
+//        throw std::runtime_error("Expected ')' at line " + std::to_string(currentToken.line));
+//    }
+//    advance(); // consume ')'
+//    return std::make_unique<UnaryOpNode>(UnaryOp::NEGATE, std::move(expr));
+//}
 llvm::Value* CodeGen::generateValue(ASTNode* node, llvm::Type* expectedType) {
     if (auto ternaryExpr = dynamic_cast<TernaryExprNode*>(node)) {
         // Generate code for the condition (e.g., z > 5)
@@ -1121,6 +1129,14 @@ llvm::Value* CodeGen::generateValue(ASTNode* node, llvm::Type* expectedType) {
             builder->CreateStore(newVal, ptr);
             return current; // Return original value (postfix)
         }
+        if (unaryOp->op == UnaryOp::NEGATE) {
+            Type* operandType = expectedType && expectedType->isFloatTy() ? Type::getFloatTy(*context) : Type::getInt32Ty(*context);
+            Value* operand = generateValue(unaryOp->operand.get(), operandType);
+            if (operand->getType()->isFloatTy()) {
+                return builder->CreateFNeg(operand);
+            }
+            return builder->CreateNeg(operand);
+        }
         Value* operand = generateValue(unaryOp->operand.get(), PointerType::get(Type::getInt32Ty(*context), 0));
         uint64_t size = 5;
         if (auto* varRef = dynamic_cast<VarRefNode*>(unaryOp->operand.get())) {
@@ -1130,6 +1146,7 @@ llvm::Value* CodeGen::generateValue(ASTNode* node, llvm::Type* expectedType) {
         switch (unaryOp->op) {
             case UnaryOp::LENGTH:
                 return ConstantInt::get(Type::getInt32Ty(*context), size);
+            
             case UnaryOp::MIN: {
                 Function* func = builder->GetInsertBlock()->getParent();
                 BasicBlock* loopStart = BasicBlock::Create(*context, "min_loop", func);

@@ -149,8 +149,106 @@ std::unique_ptr<ASTNode> Parser::parseVarDecl() {
 }
 
 std::unique_ptr<ASTNode> Parser::parseExpression() {
+    if (currentToken.type == Token::LeftParen || currentToken.type == Token::negLeftParen) {
+        auto pervType = currentToken.type;
+        advance(); // consume '('
+        auto left = parseExpression();
+        if (currentToken.type != Token::RightParen) {
+            throw std::runtime_error("Expected ')' at line " + std::to_string(currentToken.line));
+        }
+        advance(); // consume ')'
+        if(currentToken.type != Token::Semicolon){
+            // std::unique_ptr<ASTNode> left;
+            while (currentToken.type == Token::Plus || currentToken.type == Token::Minus ||
+                currentToken.type == Token::Star || currentToken.type == Token::Slash || 
+                currentToken.type == Token::EqualEqual || currentToken.type == Token::LessEqual ||
+                currentToken.type == Token::NotEqual || currentToken.type == Token::Greater ||
+                currentToken.type == Token::GreaterEqual || currentToken.type == Token::Less ||
+                currentToken.type == Token::And || currentToken.type == Token::Or ||
+                currentToken.type == Token::SignedIntLiteral || currentToken.type == Token::Modulo ||
+                currentToken.type == Token::Xor  ) {
+             BinaryOp op;
+             if (currentToken.type == Token::Plus) {
+                 advance(); // Consume '+'
+                 auto right = parsePrimary();
+                 // Handle string concatenation
+                 if (op == BinaryOp::XOR) {
+                     if (!dynamic_cast<BoolLiteral*>(left.get()) && !dynamic_cast<VarRefNode*>(left.get()) &&
+                         !dynamic_cast<BoolLiteral*>(right.get()) && !dynamic_cast<VarRefNode*>(right.get())) {
+                         throw std::runtime_error("XOR requires boolean operands at line " + std::to_string(currentToken.line));
+                     }
+                 }
+                 if (dynamic_cast<StrLiteral*>(left.get()) || dynamic_cast<StrLiteral*>(right.get()) ||
+                     dynamic_cast<VarRefNode*>(left.get()) || dynamic_cast<VarRefNode*>(right.get())) {    //   needs to be corrected
+                     left = std::make_unique<ConcatNode>(std::move(left), std::move(right));
+                 } else {
+                     op = BinaryOp::ADD;
+                     left = std::make_unique<BinaryOpNode>(op, std::move(left), std::move(right));
+                 }
+             } else
+             if (currentToken.type != Token::SignedIntLiteral){
+                 switch (currentToken.type) {
+                     case Token::Plus: op = BinaryOp::ADD; break;
+                     case Token::Minus: op = BinaryOp::SUBTRACT; break;
+                     case Token::Star: op = BinaryOp::MULTIPLY; break;
+                     case Token::Slash: op = BinaryOp::DIVIDE; break;
+                     case Token::EqualEqual: op = BinaryOp::EQUAL; break;
+                     case Token::LessEqual: op = BinaryOp::LESS_EQUAL; break;
+                     case Token::NotEqual: op = BinaryOp::NOT_EQUAL; break;
+                     case Token::Greater: op = BinaryOp::GREATER; break;
+                     case Token::GreaterEqual: op = BinaryOp::GREATER_EQUAL; break;
+                     case Token::Less: op = BinaryOp::LESS; break;
+                     case Token::And: op = BinaryOp::AND; break;
+                     case Token::Or: op = BinaryOp::OR; break;
+                     case Token::Modulo: op = BinaryOp::MODULO; break;
+                     case Token::Xor: op = BinaryOp::XOR; break; 
+                     // case Token::IntLiteral: BinaryOp::ADD; break;
+                     default: throw std::runtime_error("Unknown binary operator");
+                 }
+                 advance(); // consume operator
+                 auto right = parsePrimary();
+     
+                 if(op == BinaryOp::ADD && currentToken.type == Token::StrLiteral){
+                     if (dynamic_cast<StrLiteral*>(left.get()) || dynamic_cast<StrLiteral*>(right.get()) ||
+                     dynamic_cast<VarRefNode*>(left.get()) || dynamic_cast<VarRefNode*>(right.get())) {    //   needs to be corrected
+                     left = std::make_unique<ConcatNode>(std::move(left), std::move(right));
+                     } else {
+                         // error : NOT-string + string -- semantics
+                     }
+                 }else 
+                 
+                 left = std::make_unique<BinaryOpNode>(op, std::move(left), std::move(right));
+             }else{
+                 auto right = std::make_unique<IntLiteral>(std::stoi(currentToken.lexeme));
+                 left = std::make_unique<BinaryOpNode>(BinaryOp::ADD, std::move(left), std::move(right));
+                 advance(); // consume operator
+     
+                 // op = BinaryOp::ADD;
+                 // auto right = std::make_unique<IntLiteral>(std::stoi(currentToken.lexeme));
+                 // advance(); // consume the int literal
+                 // left = std::make_unique<BinaryOpNode>(op, std::move(left), std::move(right));
+             }
+         }
+         if (currentToken.type == Token::PlusPlus || currentToken.type == Token::MinusMinus) {
+             UnaryOp op = (currentToken.type == Token::PlusPlus) ? UnaryOp::INCREMENT : UnaryOp::DECREMENT;
+             advance(); // Consume '++' or '--'
+             if (!dynamic_cast<VarRefNode*>(left.get()) && !dynamic_cast<BinaryOpNode*>(left.get())) {
+                 throw std::runtime_error("Increment/decrement can only be applied to variables or array elements");
+             }
+             if (auto* binOp = dynamic_cast<BinaryOpNode*>(left.get())) {
+                 if (binOp->op != BinaryOp::INDEX) {
+                     throw std::runtime_error("Increment/decrement can only be applied to array elements with index");
+                 }
+             }
+             left = std::make_unique<UnaryOpNode>(op, std::move(left));
+         }
+     
+         return parseTernary(std::move(left));
+        }
+        if (pervType == Token::LeftParen) return left;
+        else return std::make_unique<UnaryOpNode>(UnaryOp::NEGATE, std::move(left));
+    }
     auto left = parsePrimary();
-    // if(currentToken.type == Token::Question) return parseTernary();
     while (currentToken.type == Token::Plus || currentToken.type == Token::Minus ||
            currentToken.type == Token::Star || currentToken.type == Token::Slash || 
            currentToken.type == Token::EqualEqual || currentToken.type == Token::LessEqual ||
@@ -236,10 +334,19 @@ std::unique_ptr<ASTNode> Parser::parseExpression() {
     }
 
     return parseTernary(std::move(left));
+// }
 }
 
 std::unique_ptr<ASTNode> Parser::parsePrimary() {
-    if (currentToken.type == Token::IntLiteral || currentToken.type == Token::SignedIntLiteral) {
+    if (currentToken.type == Token::LeftParen) {
+        advance(); // consume '('
+        auto expr = parseExpression();
+        if (currentToken.type != Token::RightParen) {
+            throw std::runtime_error("Expected ')' at line " + std::to_string(currentToken.line));
+        }
+        advance(); // consume ')'
+        return expr;
+    } else if (currentToken.type == Token::IntLiteral || currentToken.type == Token::SignedIntLiteral) {
         auto node = std::make_unique<IntLiteral>(std::stoi(currentToken.lexeme));
         advance();
         return node;

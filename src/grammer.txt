@@ -1,0 +1,56 @@
+ProgramNode → Statements
+Statements → StatementNode Statements | ε
+StatementNode → VarDeclNode | AssignNode | CompoundAssignNode | UnaryOpNode | IfElseNode | LoopNode | PrintNode | BlockNode | TryCatchNode | MatchNode
+VarDeclNode → type identifier VarDeclTail
+VarDeclTail → "," identifier VarDeclTail | "=" ExpressionNode ExprList | ";" | ε
+ExprList → "," ExpressionNode ExprList | ε
+type → "int" | "float" | "bool" | "char" | "string" | "array"
+AssignNode → identifier "=" ExpressionNode ";" | BinaryOpNode<INDEX> "=" ExpressionNode ";"
+CompoundAssignNode → identifier CompoundOp ExpressionNode ";" | BinaryOpNode<INDEX> CompoundOp ExpressionNode ";"
+UnaryOpNode → identifier UnaryOp ";" | BinaryOpNode<INDEX> UnaryOp ";"
+CompoundOp → "+=" | "-=" | "*=" | "/=" | "%="
+UnaryOp → "++" | "--"
+IfElseNode → "if" "(" ExpressionNode ")" BlockNode ElseClause
+ElseClause → "else" ElseBlock | ε
+ElseBlock → BlockNode | IfElseNode
+LoopNode → ForLoopNode | ForeachLoopNode
+ForLoopNode → "for" "(" VarDeclNode ";" ExpressionNode ";" AssignNode ")" BlockNode | "for" "(" VarDeclNode ";" ";" AssignNode ")" BlockNode | "for" "(" VarDeclNode ";" ExpressionNode ";" ")" BlockNode | "for" "(" VarDeclNode ";" ";" ")" BlockNode | "for" "(" AssignNode ";" ExpressionNode ";" AssignNode ")" BlockNode | "for" "(" AssignNode ";" ";" AssignNode ")" BlockNode | "for" "(" AssignNode ";" ExpressionNode ";" ")" BlockNode | "for" "(" AssignNode ";" ";" ")" BlockNode | "for" "(" ";" ExpressionNode ";" AssignNode ")" BlockNode | "for" "(" ";" ";" AssignNode ")" BlockNode | "for" "(" ";" ExpressionNode ";" ")" BlockNode | "for" "(" ";" ";" ")" BlockNode
+ForeachLoopNode → "foreach" "(" identifier "in" ExpressionNode ")" BlockNode
+PrintNode → "print" "(" ExpressionNode ")" ";"
+BlockNode → "{" Statements "}"
+TryCatchNode → "try" BlockNode "catch" "(" "error" identifier ")" BlockNode
+MatchNode → "match" ExpressionNode "{" MatchCases "}"
+MatchCases → MatchCaseNode MatchCaseTail | ε
+MatchCaseTail → "," MatchCaseNode MatchCaseTail | MatchCaseNode MatchCaseTail | ε
+MatchCaseNode → ExpressionNode "->" MatchBody | "_" "->" MatchBody
+MatchBody → BlockNode | StatementNode
+ExpressionNode → PrimaryNode BinaryExprTail
+BinaryExprTail → binary-op PrimaryNode BinaryExprTail | "?" ExpressionNode ":" ExpressionNode | ε
+PrimaryNode → IntLiteralNode | FloatLiteralNode | BoolLiteralNode | CharLiteralNode | StrLiteralNode | VarRefNode | ArrayLiteralNode | BinaryOpNode<INDEX> | ConcatNode | BinaryOpNode<ABS> | BinaryOpNode<POW> | BinaryOpNode<METHOD_CALL> | UnaryOpNode<NEGATE> | UnaryOpNode<LENGTH> | UnaryOpNode<MIN> | UnaryOpNode<MAX> | BinaryOpNode<MULTIPLY_ARRAY> | BinaryOpNode<ADD_ARRAY> | BinaryOpNode<SUBTRACT_ARRAY> | BinaryOpNode<DIVIDE_ARRAY> | "(" ExpressionNode ")"
+binary-op → "+" | "-" | "*" | "/" | "%" | "==" | "!=" | "<" | ">" | "<=" | ">=" | "&&" | "||" | "^"
+IntLiteralNode → digitlist | "+" digitlist | "-" digitlist
+FloatLiteralNode → digitlist "." digitlist | "+" digitlist "." digitlist | "-" digitlist "." digitlist
+BoolLiteralNode → "true" | "false"
+CharLiteralNode → "'" character "'"
+StrLiteralNode → "\"" characters "\""
+digitlist → digit digitlist | digit
+characters → character characters | ε
+VarRefNode → identifier
+ArrayLiteralNode → "[" ArrayElements "]" | "[" "]"
+ArrayElements → ExpressionNode ArrayElementsTail
+ArrayElementsTail → "," ExpressionNode ArrayElementsTail | ε
+BinaryOpNode<INDEX> → identifier "[" ExpressionNode "]"
+ConcatNode → "concat" "(" ExpressionNode "," ExpressionNode ")"
+BinaryOpNode<ABS> → "abs" "(" ExpressionNode ")"
+BinaryOpNode<POW> → "pow" "(" ExpressionNode "," ExpressionNode ")"
+BinaryOpNode<METHOD_CALL> → identifier "." identifier "()"
+UnaryOpNode<NEGATE> → "-(" ExpressionNode ")"
+UnaryOpNode<LENGTH> → "length" "(" ExpressionNode ")"
+UnaryOpNode<MIN> → "min" "(" ExpressionNode ")"
+UnaryOpNode<MAX> → "max" "(" ExpressionNode ")"
+BinaryOpNode<MULTIPLY_ARRAY> → "multiply" "(" ExpressionNode "," ExpressionNode ")"
+BinaryOpNode<ADD_ARRAY> → "add" "(" ExpressionNode "," ExpressionNode ")"
+BinaryOpNode<SUBTRACT_ARRAY> → "subtract" "(" ExpressionNode "," ExpressionNode ")"
+BinaryOpNode<DIVIDE_ARRAY> → "divide" "(" ExpressionNode "," ExpressionNode ")"
+identifier → letter identifier_tail
+identifier_tail → letter identifier_tail | digit identifier_tail | "_" identifier_tail | ε
