@@ -16,7 +16,7 @@ public:
         std::unique_ptr<ASTNode> modified;
     };
     std::vector<ModifiedNode> modifiedNodes;
-
+    std::optional<bool> evaluateConstantCondition(const ASTNode& condition) const; ////
     void optimizeNode(ASTNode& node);
     std::string printNode(const ASTNode& node) const;
     std::unique_ptr<ASTNode> unrollForLoop(LoopNode& loop);

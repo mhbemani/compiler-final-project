@@ -2,7 +2,6 @@
 #include <optional>
 #include <memory>
 #include <string>
-#include <iostream>
 
 void Optimizer::optimize(ProgramNode& program) {
     modifiedNodes.clear();
@@ -13,39 +12,34 @@ void Optimizer::optimize(ProgramNode& program) {
                 auto unrolled = unrollForLoop(*loop);
                 if (unrolled) {
                     modifiedNodes.push_back({std::move(original), cloneNode(*unrolled)});
-                    std::cout << "Replacing LoopNode with BlockNode at index " << i << "\n";
                     program.statements[i] = std::move(unrolled);
                 }
+            }
+        } else if (auto* ifElse = dynamic_cast<IfElseNode*>(program.statements[i].get())) {
+            auto result = evaluateConstantCondition(*ifElse->condition);
+            if (result.has_value()) {
+                auto original = cloneNode(*ifElse);
+                auto newBlock = std::make_unique<BlockNode>();
+                if (*result) {
+                    newBlock->statements = std::move(dynamic_cast<BlockNode&>(*ifElse->then_block).statements);
+                } else if (ifElse->else_block) {
+                    newBlock->statements = std::move(dynamic_cast<BlockNode&>(*ifElse->else_block).statements);
+                }
+                modifiedNodes.push_back({std::move(original), cloneNode(*newBlock)});
+                program.statements[i] = std::move(newBlock);
+            } else {
+                optimizeNode(*program.statements[i]);
             }
         } else {
             optimizeNode(*program.statements[i]);
         }
     }
-    std::cout << "Optimized Program AST: " << printNode(program) << "\n";
 }
 
 void Optimizer::optimizeNode(ASTNode& node) {
-    if (auto* loop = dynamic_cast<LoopNode*>(&node)) {
-        if (loop->type == LoopType::For) {
-            auto original = cloneNode(*loop);
-            auto unrolled = unrollForLoop(*loop);
-            if (unrolled) {
-                modifiedNodes.push_back({std::move(original), cloneNode(*unrolled)});
-                std::cout << "Replacing LoopNode with BlockNode\n";
-                node = std::move(*unrolled);
-            }
-        }
-        return;
-    }
-
     if (auto* block = dynamic_cast<BlockNode*>(&node)) {
         for (auto& stmt : block->statements) {
             optimizeNode(*stmt);
-        }
-    } else if (auto* ifElse = dynamic_cast<IfElseNode*>(&node)) {
-        optimizeNode(*ifElse->then_block);
-        if (ifElse->else_block) {
-            optimizeNode(*ifElse->else_block);
         }
     } else if (auto* match = dynamic_cast<MatchNode*>(&node)) {
         optimizeNode(*match->expression);
@@ -77,6 +71,38 @@ void Optimizer::optimizeNode(ASTNode& node) {
         optimizeNode(*tryCatch->tryBlock);
         optimizeNode(*tryCatch->catchBlock);
     }
+}
+
+std::optional<bool> Optimizer::evaluateConstantCondition(const ASTNode& condition) const {
+    if (auto* boolLit = dynamic_cast<const BoolLiteral*>(&condition)) {
+        return boolLit->value;
+    }
+    if (auto* binary = dynamic_cast<const BinaryOpNode*>(&condition)) {
+        if (binary->op == BinaryOp::AND || binary->op == BinaryOp::OR) {
+            auto left = evaluateConstantCondition(*binary->left);
+            auto right = evaluateConstantCondition(*binary->right);
+            if (left.has_value() && right.has_value()) {
+                if (binary->op == BinaryOp::AND) {
+                    return *left && *right;
+                } else {
+                    return *left || *right;
+                }
+            }
+        } else if (auto* leftLit = dynamic_cast<const IntLiteral*>(binary->left.get())) {
+            if (auto* rightLit = dynamic_cast<const IntLiteral*>(binary->right.get())) {
+                switch (binary->op) {
+                    case BinaryOp::LESS: return leftLit->value < rightLit->value;
+                    case BinaryOp::LESS_EQUAL: return leftLit->value <= rightLit->value;
+                    case BinaryOp::GREATER: return leftLit->value > rightLit->value;
+                    case BinaryOp::GREATER_EQUAL: return leftLit->value >= rightLit->value;
+                    case BinaryOp::EQUAL: return leftLit->value == rightLit->value;
+                    case BinaryOp::NOT_EQUAL: return leftLit->value != rightLit->value;
+                    default: return std::nullopt;
+                }
+            }
+        }
+    }
+    return std::nullopt;
 }
 
 std::string Optimizer::printNode(const ASTNode& node) const {
@@ -160,46 +186,38 @@ std::string Optimizer::printNode(const ASTNode& node) const {
 }
 
 void Optimizer::printModifiedNodes() const {
-    std::cout << "printModifiedNodes called\n";
     if (modifiedNodes.empty()) {
-        std::cout << "No loops were unrolled.\n";
         return;
     }
     for (size_t i = 0; i < modifiedNodes.size(); ++i) {
-        std::cout << "Modified Node #" << i + 1 << ":\n";
-        std::cout << "Original: " << printNode(*modifiedNodes[i].original) << "\n";
-        std::cout << "Modified: " << printNode(*modifiedNodes[i].modified) << "\n\n";
+        std::string original = printNode(*modifiedNodes[i].original);
+        std::string modified = printNode(*modifiedNodes[i].modified);
     }
 }
 
 std::unique_ptr<ASTNode> Optimizer::unrollForLoop(LoopNode& loop) {
     auto bounds = getLoopBounds(loop);
     if (!bounds) {
-        std::cout << "getLoopBounds failed\n";
         return nullptr;
     }
 
     auto [start, end, step] = *bounds;
     auto* cond = dynamic_cast<BinaryOpNode*>(loop.condition.get());
     if (!cond) {
-        std::cout << "cond cast failed\n";
         return nullptr;
     }
     int iterations = computeIterations(start, end, step, cond->op);
     if (iterations < 0 || iterations >= 10) {
-        std::cout << "iterations invalid: " << iterations << "\n";
         return nullptr;
     }
 
     std::string loopVar = getLoopVariable(loop);
     if (loopVar.empty()) {
-        std::cout << "loopVar empty\n";
         return nullptr;
     }
 
     auto* body = dynamic_cast<BlockNode*>(loop.body.get());
     if (!body) {
-        std::cout << "body cast failed\n";
         return nullptr;
     }
     auto unrolled = std::make_unique<BlockNode>();
@@ -211,7 +229,6 @@ std::unique_ptr<ASTNode> Optimizer::unrollForLoop(LoopNode& loop) {
             unrolled->statements.push_back(std::move(clonedStmt));
         }
     }
-    std::cout << "unrollForLoop succeeded: iterations=" << iterations << ", loopVar=" << loopVar << "\n";
     return unrolled;
 }
 
@@ -223,7 +240,6 @@ std::optional<std::tuple<int, int, int>> Optimizer::getLoopBounds(const LoopNode
             start = initLit->value;
             varName = varDecl->name;
         } else {
-            std::cout << "initLit cast failed\n";
             return std::nullopt;
         }
     } else if (auto* assign = dynamic_cast<AssignNode*>(loop.init.get())) {
@@ -231,11 +247,9 @@ std::optional<std::tuple<int, int, int>> Optimizer::getLoopBounds(const LoopNode
             start = initLit->value;
             varName = assign->name;
         } else {
-            std::cout << "initLit cast failed\n";
             return std::nullopt;
         }
     } else {
-        std::cout << "init cast failed\n";
         return std::nullopt;
     }
 
@@ -243,22 +257,18 @@ std::optional<std::tuple<int, int, int>> Optimizer::getLoopBounds(const LoopNode
     auto* cond = dynamic_cast<BinaryOpNode*>(loop.condition.get());
     if (!cond || !(cond->op == BinaryOp::LESS || cond->op == BinaryOp::LESS_EQUAL ||
                    cond->op == BinaryOp::GREATER || cond->op == BinaryOp::GREATER_EQUAL)) {
-        std::cout << "cond invalid\n";
         return std::nullopt;
     }
     if (auto* leftVar = dynamic_cast<VarRefNode*>(cond->left.get())) {
         if (leftVar->name != varName) {
-            std::cout << "leftVar name mismatch\n";
             return std::nullopt;
         }
         if (auto* rightLit = dynamic_cast<IntLiteral*>(cond->right.get())) {
             end = rightLit->value;
         } else {
-            std::cout << "rightLit cast failed\n";
             return std::nullopt;
         }
     } else {
-        std::cout << "leftVar cast failed\n";
         return std::nullopt;
     }
 
@@ -269,12 +279,10 @@ std::optional<std::tuple<int, int, int>> Optimizer::getLoopBounds(const LoopNode
         } else if (unary->op == UnaryOp::DECREMENT && dynamic_cast<VarRefNode*>(unary->operand.get())->name == varName) {
             step = -1;
         } else {
-            std::cout << "unary invalid\n";
             return std::nullopt;
         }
     } else if (auto* assign = dynamic_cast<AssignNode*>(loop.update.get())) {
         if (assign->name != varName) {
-            std::cout << "assign name mismatch\n";
             return std::nullopt;
         }
         if (auto* binOp = dynamic_cast<BinaryOpNode*>(assign->value.get())) {
@@ -289,11 +297,9 @@ std::optional<std::tuple<int, int, int>> Optimizer::getLoopBounds(const LoopNode
             }
         }
     } else {
-        std::cout << "update cast failed\n";
         return std::nullopt;
     }
 
-    std::cout << "getLoopBounds: start=" << start << ", end=" << end << ", step=" << step << "\n";
     return std::make_tuple(start, end, step);
 }
 
@@ -385,7 +391,6 @@ void Optimizer::substituteVariable(ASTNode& node, const std::string& var, int va
     } else if (auto* print = dynamic_cast<PrintNode*>(&node)) {
         if (auto* exprVar = dynamic_cast<VarRefNode*>(print->expr.get())) {
             if (exprVar->name == var) {
-                std::cout << "Substituting in PrintNode: " << var << " with " << value << "\n";
                 print->expr = std::make_unique<IntLiteral>(value);
             }
         } else {
@@ -394,7 +399,6 @@ void Optimizer::substituteVariable(ASTNode& node, const std::string& var, int va
     } else if (auto* binary = dynamic_cast<BinaryOpNode*>(&node)) {
         if (auto* leftVar = dynamic_cast<VarRefNode*>(binary->left.get())) {
             if (leftVar->name == var) {
-                std::cout << "Substituting in BinaryOpNode left: " << var << " with " << value << "\n";
                 binary->left = std::make_unique<IntLiteral>(value);
             }
         } else {
@@ -403,7 +407,6 @@ void Optimizer::substituteVariable(ASTNode& node, const std::string& var, int va
         if (binary->right) {
             if (auto* rightVar = dynamic_cast<VarRefNode*>(binary->right.get())) {
                 if (rightVar->name == var) {
-                    std::cout << "Substituting in BinaryOpNode right: " << var << " with " << value << "\n";
                     binary->right = std::make_unique<IntLiteral>(value);
                 }
             } else {
@@ -413,7 +416,6 @@ void Optimizer::substituteVariable(ASTNode& node, const std::string& var, int va
     } else if (auto* unary = dynamic_cast<UnaryOpNode*>(&node)) {
         if (auto* operandVar = dynamic_cast<VarRefNode*>(unary->operand.get())) {
             if (operandVar->name == var) {
-                std::cout << "Substituting in UnaryOpNode: " << var << " with " << value << "\n";
                 unary->operand = std::make_unique<IntLiteral>(value);
             }
         } else {
@@ -422,7 +424,6 @@ void Optimizer::substituteVariable(ASTNode& node, const std::string& var, int va
     } else if (auto* assign = dynamic_cast<AssignNode*>(&node)) {
         if (auto* valueVar = dynamic_cast<VarRefNode*>(assign->value.get())) {
             if (valueVar->name == var) {
-                std::cout << "Substituting in AssignNode: " << var << " with " << value << "\n";
                 assign->value = std::make_unique<IntLiteral>(value);
             }
         } else {
@@ -435,7 +436,6 @@ void Optimizer::substituteVariable(ASTNode& node, const std::string& var, int va
     } else if (auto* concat = dynamic_cast<ConcatNode*>(&node)) {
         if (auto* leftVar = dynamic_cast<VarRefNode*>(concat->left.get())) {
             if (leftVar->name == var) {
-                std::cout << "Substituting in ConcatNode left: " << var << " with " << value << "\n";
                 concat->left = std::make_unique<IntLiteral>(value);
             }
         } else {
@@ -443,7 +443,6 @@ void Optimizer::substituteVariable(ASTNode& node, const std::string& var, int va
         }
         if (auto* rightVar = dynamic_cast<VarRefNode*>(concat->right.get())) {
             if (rightVar->name == var) {
-                std::cout << "Substituting in ConcatNode right: " << var << " with " << value << "\n";
                 concat->right = std::make_unique<IntLiteral>(value);
             }
         } else {
@@ -453,7 +452,6 @@ void Optimizer::substituteVariable(ASTNode& node, const std::string& var, int va
         if (varDecl->value) {
             if (auto* valueVar = dynamic_cast<VarRefNode*>(varDecl->value.get())) {
                 if (valueVar->name == var) {
-                    std::cout << "Substituting in VarDeclNode: " << var << " with " << value << "\n";
                     varDecl->value = std::make_unique<IntLiteral>(value);
                 }
             } else {
