@@ -1,5 +1,6 @@
 #include "lexer.h"
 #include "parser.h"
+#include "optimizer.h"
 #include "codegen.h"
 #include <iostream>
 /*
@@ -7,7 +8,7 @@
        copy llvm ir output in main.ll
        llc -filetype=obj main.ll -o main.o
        clang main.o -o main
-       ./main
+       ./main 
 */ 
 
 // no support for "bool a = true, f, s = false;" structure
@@ -23,6 +24,15 @@ int main(int argc, char* argv[]) {
         Parser parser(lexer);
         auto ast = parser.parseProgram();
         
+    // std::cout << "Before Optimization:\n" << ast->toString() << "\n";
+    // std::cout << "\nBefore Optimization: " << optimizer.printNode(*ast) << "\n\n";
+    Optimizer optimizer;
+    optimizer.optimize(*ast);
+    // optimizer.printModifiedNodes();
+    // std::cout << "\nAfter Optimization: " << optimizer.printNode(*ast) << "\n\n";
+
+    // std::cout << "After Optimization:\n" << ast->toString() << "\n";
+
         CodeGen codegen;
         codegen.generate(*ast);
         codegen.dump();

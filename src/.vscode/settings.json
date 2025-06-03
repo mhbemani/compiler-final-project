@@ -43,6 +43,8 @@
         "string_view": "cpp",
         "typeinfo": "cpp",
         "algorithm": "cpp",
-        "cstddef": "cpp"
-    }
+        "cstddef": "cpp",
+        "cwctype": "cpp"
+    },
+    "C_Cpp.errorSquiggles": "disabled"
 }

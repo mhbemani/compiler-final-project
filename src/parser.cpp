@@ -6,7 +6,7 @@ Parser::Parser(Lexer& lexer) : lexer(lexer) {
     currentToken = lexer.nextToken();
     peekToken = lexer.nextToken();
 }
-
+ 
 void Parser::advance() {
     currentToken = peekToken;
     peekToken = lexer.nextToken();
