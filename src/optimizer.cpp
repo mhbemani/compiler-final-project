@@ -207,7 +207,7 @@ std::unique_ptr<ASTNode> Optimizer::unrollForLoop(LoopNode& loop) {
         return nullptr;
     }
     int iterations = computeIterations(start, end, step, cond->op);
-    if (iterations < 0 || iterations >= 10) {
+    if (iterations < 0) {
         return nullptr;
     }
 
